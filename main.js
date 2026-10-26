@@ -8,6 +8,8 @@ const { execFile, spawn } = require('child_process');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -167,38 +169,68 @@ async function nvidia() {
   return { use: isFinite(use) ? use : null, temp: isFinite(temp) ? temp : null };
 }
 
+// Recorre el árbol JSON de LibreHardwareMonitor guardando también el icono de cada hardware (cpu / gpu)
 function walk(n, trail, out) {
-  const p = [...trail, n.Text];
+  const p = [...trail, { text: n.Text || '', img: String(n.ImageURL || '').toLowerCase() }];
   if (n.Children?.length) n.Children.forEach(c => walk(c, p, out));
-  else out.push({ path: p, text: n.Text, value: n.Value });
+  else out.push({ path: p.map(x => x.text), imgs: p.map(x => x.img), text: n.Text, value: n.Value });
 }
 const num = v => { const x = parseFloat(String(v).replace(',', '.')); return isFinite(x) ? x : null; };
+const okTemp = v => v != null && v > 0 && v < 125;
 
-// LibreHardwareMonitor (opcional) con "Remote Web Server" activado: da temperaturas de CPU y GPU AMD/Intel
+// LibreHardwareMonitor / OpenHardwareMonitor con "Remote Web Server" (puerto 8085).
+// Se usa 127.0.0.1 y no "localhost": en Node/Electron nuevos "localhost" puede resolver a ::1 y no conectar.
 async function lhm() {
   if (Date.now() < lhmDown) return null;
   try {
-    const j = await (await fetch('http://localhost:8085/data.json', { signal: AbortSignal.timeout(1200) })).json();
+    const j = await (await fetch('http://127.0.0.1:8085/data.json', { signal: AbortSignal.timeout(1200) })).json();
     const s = [];
     walk(j, [], s);
-    const pick = (grp, re) => { const x = s.find(v => v.path.includes(grp) && re.test(v.text)); return x ? num(x.value) : null; };
-    return {
-      cpuTemp: pick('Temperatures', /^(CPU Package|Core \(Tctl\/Tdie\)|Core \(Tctl\)|Core \(Tdie\)|Core Max)$/),
-      gpuTemp: pick('Temperatures', /^GPU Core$/),
-      gpuUse: pick('Load', /^GPU Core$/)
-    };
+    const temps = s.filter(v => v.path.includes('Temperatures'));
+    const inHw = (v, re) => v.imgs.some(i => re.test(i));
+    const cpuT = temps.filter(v => inHw(v, /cpu/));
+    const first = (list, res) => { for (const re of res) { const x = list.find(v => re.test(v.text)); if (x && okTemp(num(x.value))) return num(x.value); } return null; };
+    let cpuTemp = first(cpuT, [/^CPU Package$/i, /^Core \(Tctl\/Tdie\)$/i, /^Core \(Tctl\)$/i, /^Core \(Tdie\)$/i, /^Core Max$/i, /^CPU \(Tctl\/Tdie\)$/i, /^CPU Die/i, /^CPU$/i, /^Core Average$/i]);
+    if (cpuTemp == null) {
+      // Cualquier sensor de temperatura de la CPU (CPU Core #1, CCD1, etc.): el más alto
+      const vals = cpuT.map(v => num(v.value)).filter(okTemp);
+      if (vals.length) cpuTemp = Math.max(...vals);
+    }
+    const gpuT = temps.filter(v => inHw(v, /nvidia|ati|amd|gpu|intel/) && !inHw(v, /cpu/));
+    const gpuTemp = first(gpuT, [/^GPU Core$/i, /^GPU Hot Spot$/i]);
+    const gx = s.find(v => v.path.includes('Load') && /^GPU Core$/i.test(v.text));
+    return { cpuTemp, gpuTemp, gpuUse: gx ? num(gx.value) : null };
   } catch { lhmDown = Date.now() + 15000; return null; }
 }
 
-// Uso de GPU genérico (AMD/Intel) con contadores de Windows; si no funciona en tu idioma se desactiva solo
-async function typeperf() {
-  if (tp === false) return null;
-  const o = await run('typeperf', ['\\GPU Engine(*engtype_3D)\\Utilization Percentage', '-sc', '1'], 4000);
-  const line = o && o.split(/\r?\n/).filter(l => l.startsWith('"'))[1];
-  if (!line) { tp = false; return null; }
-  const sum = line.split('","').slice(1).map(v => parseFloat(v.replace(/"/g, '').replace(',', '.'))).filter(isFinite).reduce((a, b) => a + b, 0);
-  tp = true;
-  return Math.min(100, Math.round(sum));
+// Respaldo sin programas extra: zonas térmicas de Windows (funciona en muchos portátiles y algunas placas).
+// Se ejecuta en segundo plano, como mucho cada 8 s, y se desactiva solo si nunca da datos.
+let wmiTemp = null, wmiAt = 0, wmiBusy = false, wmiFails = 0;
+function refreshWmi() {
+  if (wmiBusy || wmiFails >= 3 || Date.now() - wmiAt < 8000) return;
+  wmiBusy = true; wmiAt = Date.now();
+  const ps = "$t=@(); " +
+    "try{$t+=Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -EA Stop | %{$_.CurrentTemperature/10-273.15}}catch{}; " +
+    "try{$t+=Get-CimInstance Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA Stop | %{$_.Temperature-273.15}}catch{}; " +
+    "$t -join ','";
+  run('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], 7000).then(o => {
+    const vals = (o || '').trim().split(',').map(num).filter(okTemp);
+    if (vals.length) { wmiTemp = Math.max(...vals); wmiFails = 0; } else { wmiTemp = null; wmiFails++; }
+  }).finally(() => { wmiBusy = false; });
+}
+
+// Uso de GPU genérico (AMD/Intel) con contadores de Windows. Es una consulta pesada:
+// va en segundo plano, como mucho cada 6 s, y nunca bloquea el ciclo de estadísticas.
+let tpVal = null, tpAt = 0, tpBusy = false;
+function refreshTypeperf() {
+  if (tp === false || tpBusy || Date.now() - tpAt < 6000) return;
+  tpBusy = true; tpAt = Date.now();
+  run('typeperf', ['\\GPU Engine(*engtype_3D)\\Utilization Percentage', '-sc', '1'], 5000).then(o => {
+    const line = o && o.split(/\r?\n/).filter(l => l.startsWith('"'))[1];
+    if (!line) { tp = false; tpVal = null; return; }
+    const sum = line.split('","').slice(1).map(v => parseFloat(v.replace(/"/g, '').replace(',', '.'))).filter(isFinite).reduce((a, b) => a + b, 0);
+    tp = true; tpVal = Math.min(100, Math.round(sum));
+  }).finally(() => { tpBusy = false; });
 }
 
 async function tick() {
@@ -209,15 +241,15 @@ async function tick() {
     const total = os.totalmem();
     const ram = { used: total - os.freemem(), total };
     let gpu = { use: null, temp: null };
-    const n = await nvidia();
+    const [n, l] = await Promise.all([nvidia(), lhm()]);   // en paralelo, no uno tras otro
     if (n) gpu = n;
-    const l = await lhm();
     if (l) {
       cpu.temp = l.cpuTemp;
       if (gpu.use == null) gpu.use = l.gpuUse;
       if (gpu.temp == null) gpu.temp = l.gpuTemp;
     }
-    if (gpu.use == null) gpu.use = await typeperf();
+    if (cpu.temp == null) { refreshWmi(); cpu.temp = wmiTemp; }
+    if (gpu.use == null) { refreshTypeperf(); gpu.use = tpVal; }
     if (win && win.isVisible()) win.webContents.send('stats', { cpu, ram, gpu });
   } finally { busy = false; }
 }

@@ -9,14 +9,10 @@
   html, body { height: 100%; overflow: hidden; background: #061a55; color: #fff;
     font-family: "Segoe UI Light", "Segoe UI", system-ui, sans-serif; user-select: none; }
 
-  /* Fondo: solo transform/opacity, para mantener 60 fps */
-  #bg { position: fixed; inset: 0; background: linear-gradient(160deg, #0a3fb0 0%, #0a2a86 45%, #061a55 100%); }
-  #wave { position: fixed; left: -20%; top: -20%; width: 140%; height: 140%;
-    background:
-      radial-gradient(ellipse 60% 40% at 30% 60%, rgba(70,140,255,.32), transparent 70%),
-      radial-gradient(ellipse 50% 40% at 80% 30%, rgba(20,90,230,.32), transparent 70%);
-    animation: wave 24s ease-in-out infinite alternate; }
-  @keyframes wave { to { transform: translate3d(6%, 4%, 0) scale(1.08); } }
+  /* Fondo estilo XMB de PS3: ondas dibujadas por un shader WebGL a media resolución (muy barato).
+     El degradado CSS de #bg sirve de respaldo si WebGL no está disponible. */
+  #bg { position: fixed; inset: 0; background: linear-gradient(180deg, #041a5c 0%, #0a3cb0 55%, #1b63e0 100%); }
+  #wave { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   #flash { position: fixed; inset: 0; background: #7fb2ff; opacity: 0; pointer-events: none; }
 
   /* Barra superior */
@@ -29,13 +25,16 @@
   #right { display: flex; justify-content: flex-end; align-items: center; gap: calc(var(--u) * 36); }
   #stats { font-size: calc(var(--u) * 24); white-space: pre; opacity: .92; }
   #clock { font-size: calc(var(--u) * 38); }
+  #tnote { position: fixed; right: calc(var(--u) * 70); top: calc(var(--u) * 100); font-size: calc(var(--u) * 15); opacity: 0; transition: opacity .3s; }
+  #tnote.on { opacity: .55; }
 
   /* Escenario */
   #stage { position: fixed; inset: 0; }
   .tile { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; background: #12409f;
-    transition: transform .2s cubic-bezier(.2,.8,.2,1); contain: layout paint; }
+    transition: transform .24s cubic-bezier(.22,.8,.24,1); contain: layout paint;
+    will-change: transform; backface-visibility: hidden; }
   .tile .art { position: absolute; inset: 0; }
-  .tile img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; pointer-events: none; }
   .ph { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 22px; font-size: 34px; line-height: 1.1;
     background: linear-gradient(160deg, #1f5fd6, #0b2f86); }
   .tile.special .art { display: flex; align-items: center; justify-content: center; font-size: 150px; font-weight: 100;
@@ -47,26 +46,18 @@
   #title { position: absolute; font-size: calc(var(--u) * 46); font-weight: 300; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; z-index: 6; }
 
-  /* Panel inferior y recientes (solo diseño PS4) */
-  #info { position: fixed; left: calc(var(--u) * 193); top: calc(var(--u) * 705); width: calc(var(--u) * 1040); bottom: 0;
-    background: #1b55c6; padding: calc(var(--u) * 28); display: flex; gap: calc(var(--u) * 28); align-items: flex-start; }
-  #i-cover { width: calc(var(--u) * 150); height: calc(var(--u) * 150); object-fit: cover; flex: none; display: none; }
-  #i-txt { min-width: 0; }
-  #i-name { font-size: calc(var(--u) * 36); font-weight: 600; font-family: "Segoe UI Semibold", "Segoe UI", sans-serif; }
-  #i-sub { font-size: calc(var(--u) * 24); margin-top: calc(var(--u) * 6); }
-  #i-last { font-size: calc(var(--u) * 22); opacity: .85; margin-top: calc(var(--u) * 14); }
-  #i-path { font-size: calc(var(--u) * 18); opacity: .6; margin-top: calc(var(--u) * 10); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: calc(var(--u) * 800); }
+  /* Recientes (solo diseño PS4) */
   #recent { position: fixed; left: calc(var(--u) * 1332); top: calc(var(--u) * 696); width: calc(var(--u) * 520); }
   #recent h2 { font-size: calc(var(--u) * 32); font-weight: 300; }
   .rc { display: flex; align-items: center; gap: calc(var(--u) * 20); margin-top: calc(var(--u) * 18); cursor: pointer; }
   .rc img, .rc .rph { width: calc(var(--u) * 96); height: calc(var(--u) * 96); object-fit: cover; flex: none; background: #12409f; }
   .rc span { font-size: calc(var(--u) * 24); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  body.center #info, body.center #recent { display: none; }
+  body.center #recent { display: none; }
   body.ps4 #hint { opacity: .5; }
 
   /* Entrada: ~0.4 s, solo transform y opacity */
-  body.enter #stage { animation: stageIn .4s cubic-bezier(.15,.9,.2,1) both; }
-  body.enter #top, body.enter #info, body.enter #recent { animation: fadeIn .35s .08s ease-out both; }
+  body.enter #stage { animation: stageIn .4s cubic-bezier(.15,.9,.2,1) backwards; }
+  body.enter #top, body.enter #recent { animation: fadeIn .35s .08s ease-out backwards; }
   body.enter #flash { animation: flash .4s ease-out; }
   @keyframes stageIn { from { opacity: 0; transform: translate3d(0, 40px, 0); } }
   @keyframes fadeIn { from { opacity: 0; } }
@@ -89,7 +80,7 @@
 </style>
 </head>
 <body class="ps4 enter">
-<div id="bg"></div><div id="wave"></div>
+<div id="bg"></div><canvas id="wave"></canvas>
 
 <div id="top">
   <div id="hint">Enter jugar &nbsp; C portada &nbsp; L diseño &nbsp; Supr quitar &nbsp; Esc cerrar</div>
@@ -104,12 +95,9 @@
   <div id="title"></div>
 </div>
 
-<div id="info">
-  <img id="i-cover" alt="">
-  <div id="i-txt"><div id="i-name"></div><div id="i-sub"></div><div id="i-last"></div><div id="i-path"></div></div>
-</div>
 <div id="recent"><h2>Recientes</h2><div id="rlist"></div></div>
 
+<div id="tnote">Sin sensor de temperatura: abre LibreHardwareMonitor con Remote Web Server (puerto 8085)</div>
 <div id="flash"></div><div id="toast"></div><div id="fps"></div>
 
 <div id="settings">
@@ -196,8 +184,8 @@ function buildTile(it, i) {
   } else {
     const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = it.name; art.appendChild(ph);
     t._setImg = url => {
-      const img = new Image(); img.draggable = false;
-      img.onload = () => { art.querySelectorAll('img').forEach(x => x.remove()); art.appendChild(img); ph.style.display = 'none'; if (items[sel] === it) updateInfo(); updateRecent(); };
+      const img = new Image(); img.draggable = false; img.decoding = 'async';
+      img.onload = () => { art.querySelectorAll('img').forEach(x => x.remove()); art.appendChild(img); ph.style.display = 'none'; updateRecent(); };
       img.src = url;
     };
     if (covers[it.id]) t._setImg(covers[it.id]);
@@ -228,23 +216,9 @@ async function load(force) {
 }
 
 // ---------- Info y recientes ----------
-function rel(ts) {
-  const m = Math.round((Date.now() - ts) / 60000), f = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
-  if (m < 60) return f.format(-Math.max(m, 0), 'minute');
-  if (m < 1440) return f.format(-Math.round(m / 60), 'hour');
-  return f.format(-Math.round(m / 1440), 'day');
-}
 function updateInfo() {
   const it = items[sel]; if (!it) return;
   $('#title').textContent = it.name;
-  $('#i-name').textContent = it.name;
-  const special = it.type === 'add' || it.type === 'cfg';
-  $('#i-sub').textContent = it.type === 'steam' ? 'Steam' : it.type === 'epic' ? 'Epic Games' : it.type === 'custom' ? 'Añadido por ti'
-    : it.type === 'add' ? 'Elige un .exe y el launcher le busca una portada' : 'Diseño y clave para las portadas';
-  $('#i-last').textContent = special ? '' : it.last ? 'Jugado ' + rel(it.last) : 'Aún sin jugar desde este launcher';
-  $('#i-path').textContent = special ? '' : (it.dir || it.exe || '');
-  const c = $('#i-cover');
-  if (!special && covers[it.id]) { c.src = covers[it.id]; c.style.display = 'block'; } else c.style.display = 'none';
 }
 function updateRecent() {
   const list = $('#rlist'); list.innerHTML = '';
@@ -356,6 +330,7 @@ window.api.onStats(s => {
   const p = v => v == null ? '--%' : Math.round(v) + '%';
   const t = v => v == null ? '--°' : Math.round(v) + '°';
   const g = n => (n / 1073741824).toFixed(1);
+  $('#tnote').classList.toggle('on', s.cpu.temp == null);
   $('#stats').textContent =
     `CPU ${p(s.cpu.use)} ${t(s.cpu.temp)}  |  RAM ${g(s.ram.used)}/${Math.round(g(s.ram.total))} GB  |  GPU ${p(s.gpu.use)} ${t(s.gpu.temp)}`;
 });
@@ -363,18 +338,85 @@ window.api.onStats(s => {
 // ---------- Mostrar / ocultar ----------
 window.api.onEnter(async () => {
   document.body.classList.remove('enter'); void document.body.offsetWidth; document.body.classList.add('enter');
-  startPoll();
+  startPoll(); startWave();
+  await new Promise(r => setTimeout(r, 450));   // deja terminar la animación de entrada antes de escanear
   await load();
   sel = 0; placeInstant(); updateInfo();   // empieza por el último juego jugado
 });
-window.api.onLeave(stopPoll);
+window.api.onLeave(() => { stopPoll(); stopWave(); });
+
+
+// ---------- Fondo estilo PS3 (XMB): cintas de seda en movimiento ----------
+const Wave = (() => {
+  const cv = $('#wave');
+  const gl = cv.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'low-power', preserveDrawingBuffer: false });
+  if (!gl) { cv.style.display = 'none'; return { start() {}, stop() {}, resize() {} }; }
+  const VS = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+  const FS = `
+    precision mediump float;
+    uniform vec2 r; uniform float t;
+    // Una cinta: dos bordes que ondulan y se cruzan, con relleno degradado y filo brillante
+    float ribbon(vec2 p, float k, float sp) {
+      float w = t * sp;
+      float c  = 0.30 + 0.16 * k + 0.075 * sin(p.x * 1.25 + w * 1.7 + k * 2.1) + 0.040 * sin(p.x * 2.60 - w * 2.3 + k * 4.0);
+      float th = 0.055 + 0.050 * sin(p.x * 1.60 + w * 1.9 + k * 1.3);
+      float top = c + th, bot = c - th;
+      float inside = smoothstep(bot - .006, bot + .006, p.y) * (1. - smoothstep(top - .006, top + .006, p.y));
+      float g = clamp((p.y - bot) / max(top - bot, .001), 0., 1.);
+      float edge = exp(-abs(p.y - top) * 150.) * .55 + exp(-abs(p.y - bot) * 150.) * .30;
+      float haze = exp(-abs(p.y - c) * 5.5) * .05;                 // resplandor suave alrededor
+      return inside * (.05 + .13 * g) + edge * .17 + haze;
+    }
+    void main() {
+      vec2 p = gl_FragCoord.xy / r;
+      p.x *= r.x / r.y;
+      vec3 top = vec3(.016, .090, .330), mid = vec3(.040, .235, .690), bot = vec3(.105, .400, .900);
+      vec3 col = mix(bot, mid, smoothstep(.0, .55, p.y));
+      col = mix(col, top, smoothstep(.45, 1., p.y));
+      float a = ribbon(p, 0., .105) + ribbon(p, 1., .080) * .85 + ribbon(p, 2., .062) * .7 + ribbon(p, -.7, .125) * .6;
+      col += vec3(.55, .74, 1.) * a;
+      col *= 1. - .35 * dot(p - vec2(r.x / r.y * .5, .5), p - vec2(r.x / r.y * .5, .5)) * .6;   // viñeta suave
+      gl_FragColor = vec4(col, 1.);
+    }`;
+  const mk = (type, src) => { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); return sh; };
+  const pr = gl.createProgram();
+  gl.attachShader(pr, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { cv.style.display = 'none'; return { start() {}, stop() {}, resize() {} }; }
+  gl.useProgram(pr);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);   // un triángulo que cubre todo
+  const loc = gl.getAttribLocation(pr, 'a');
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const uR = gl.getUniformLocation(pr, 'r'), uT = gl.getUniformLocation(pr, 't');
+  let raf = 0, last = 0, time = 0;
+  function resize() {
+    const k = 0.5;                       // media resolución: el fondo es suave y el coste baja a la cuarta parte
+    cv.width = Math.max(2, Math.round(innerWidth * k)); cv.height = Math.max(2, Math.round(innerHeight * k));
+    gl.viewport(0, 0, cv.width, cv.height); gl.uniform2f(uR, cv.width, cv.height);
+    draw();
+  }
+  function draw() { gl.uniform1f(uT, time); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    time += Math.min(0.05, (now - last) / 1000); last = now;
+    draw();
+  }
+  return {
+    start() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } },
+    stop() { cancelAnimationFrame(raf); raf = 0; },   // oculto = 0% de GPU
+    resize
+  };
+})();
+const startWave = () => Wave.start(), stopWave = () => Wave.stop();
+addEventListener('resize', () => Wave.resize());
 
 // ---------- Inicio ----------
 (async () => {
   const c = await window.api.getCfg();
   $('#uname').textContent = c.user; $('#avatar').textContent = (c.user[0] || '?').toUpperCase();
   setLayout(c.layout === 'center' ? 'center' : 'ps4', false);
-  resize();
+  resize(); Wave.resize(); startWave();
   await load(true);
 })();
 </script>
