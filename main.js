@@ -2,22 +2,51 @@ const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, shell, 
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
+const { parseLhm } = require('./lhm');
 
-// Rendimiento: rasterizado por GPU
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
+// Rendimiento: se dejan los valores por defecto de Chromium (igual que en el navegador); forzar flags de GPU empeora en varios drivers.
+// En portátiles con dos GPU pide la potente, para que Windows no mande el launcher a la integrada.
+
+// ---------- Modo gráfico ----------
+// Forzar la GPU dedicada (lo que había antes) en portátiles con dos GPU suele dar ~20 fps: cada fotograma se copia de una GPU a otra.
+// Ahora arranca con los valores por defecto de Chromium y, la primera vez, el launcher MIDE sus fps y prueba otros modos
+// (integrada, OpenGL, sin GPU, dedicada) hasta quedarse con el que da 60 fps. El modo elegido se guarda en config.json.
+const GPU_MODES = [
+  { id: 'auto' },                                         // valores por defecto de Chromium
+  { id: 'low',  sw: ['force_low_power_gpu'] },            // GPU integrada
+  { id: 'gl',   sw: ['use-angle', 'gl'] },                // ANGLE sobre OpenGL
+  { id: 'soft', soft: true },                             // sin aceleración por GPU
+  { id: 'high', sw: ['force_high_performance_gpu'] }      // GPU dedicada
+];
+const earlyCfgFile = path.join(app.getPath('userData'), 'config.json');
+let early = {};
+try { early = JSON.parse(fs.readFileSync(earlyCfgFile, 'utf8')); } catch {}
+(function pickGpuMode() {
+  const t = early.tune = early.tune || { done: false, tried: {} };
+  let id = GPU_MODES.some(m => m.id === early.gpuMode) ? early.gpuMode : 'auto';
+  if (t.pending) {          // el arranque anterior con este modo no llegó a cargar la interfaz: se descarta y se pasa al siguiente
+    t.tried[id] = 0; t.pending = false;
+    const next = GPU_MODES.find(m => !(m.id in t.tried));
+    if (next) id = next.id; else { id = Object.entries(t.tried).sort((a, b) => b[1] - a[1])[0][0]; t.done = true; }
+    early.gpuMode = id;
+    try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
+  }
+  const m = GPU_MODES.find(x => x.id === id);
+  if (m.soft) app.disableHardwareAcceleration(); else if (m.sw) app.commandLine.appendSwitch(...m.sw);
+})();
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 
-if (!app.requestSingleInstanceLock()) app.quit();
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
 
 let win, tray, cfg;
 const userDir = () => app.getPath('userData');
 const coversDir = () => path.join(userDir(), 'covers');
 const cfgFile = () => path.join(userDir(), 'config.json');
-const DEFAULTS = { custom: [], apiKey: '', hotkey: 'Control+Alt+P', layout: 'ps4', recent: {} };
+const DEFAULTS = { custom: [], apiKey: '', hotkey: 'Control+Alt+P', layout: 'ps4', recent: {}, bg: true, autostart: false, minimized: false, hideTaskbar: true, padMaps: {}, gpuMode: 'auto', tune: { done: false, tried: {} } };
 
 function loadCfg() {
   try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; }
@@ -27,6 +56,40 @@ function saveCfg() { fs.mkdirSync(userDir(), { recursive: true }); fs.writeFileS
 
 const norm = p => path.resolve(p).toLowerCase();
 const nkey = s => (s.toLowerCase().replace(/[^a-z0-9]/g, '') || s.toLowerCase());
+// id estable por ruta: importar una carpeta crea muchos juegos en el mismo milisegundo, Date.now() chocaría
+const customId = exe => 'custom:' + crypto.createHash('sha1').update(norm(exe)).digest('hex').slice(0, 12);
+
+// ---------- Importar una carpeta ----------
+// Busca .exe hasta 3 niveles de profundidad y descarta lo que no es un juego (desinstaladores, redistribuibles, crash handlers...)
+const JUNK_EXE = [/^unins/, /uninstall/, /^setup/, /^install/, /redist/, /^vc_?red/, /^dxsetup/, /^dxwebsetup/, /^dotnet/, /^ndp\d/,
+  /^oalinst/, /physx/, /crash/, /^updater?$/, /updater$/, /^cef/, /^ue4?prereq/, /easyanticheat/, /^eac/, /^beservice/, /battleye/,
+  /^notification_helper/, /^helper$/, /^7z/, /^webview/, /^msedgewebview/, /^dxdiag/, /^vulkan/, /^launcherhelper/];
+const JUNK_DIR = /^(_?commonredist|redist\w*|directx|vcredist|dotnet\w*|engine|\$recycle\.bin|system volume information|__macosx|\.git|node_modules|crashreport\w*|_?installer|prereq\w*)$/i;
+const MAX_EXES = 500;
+
+async function findExes(dir, depth, out) {
+  let ents = [];
+  try { ents = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return out; }
+  ents.sort((a, b) => a.name.localeCompare(b.name));
+  for (const e of ents) {
+    if (out.length >= MAX_EXES) break;
+    const full = path.join(dir, e.name);
+    if (e.isFile() && /\.exe$/i.test(e.name)) {
+      const base = e.name.replace(/\.exe$/i, '').toLowerCase();
+      if (!JUNK_EXE.some(re => re.test(base))) out.push(full);
+    } else if (e.isDirectory() && depth < 3 && !JUNK_DIR.test(e.name)) {   // los enlaces simbólicos no cuentan como directorio: sin bucles
+      await findExes(full, depth + 1, out);
+    }
+  }
+  return out;
+}
+
+// Nombre del juego a partir del .exe; si el nombre es genérico ("game.exe", "launcher.exe") usa el de la carpeta
+function nameFromExe(exe) {
+  const base = path.basename(exe).replace(/\.[^.]+$/, '');
+  const parent = path.basename(path.dirname(exe));
+  return /^(game|launcher|start|run|play|main|app|client|win\d*|bin)$/i.test(base) && parent ? parent : base;
+}
 
 // ---------- Escaneo de juegos ----------
 function steamPath() {
@@ -44,7 +107,7 @@ async function scanSteam() {
   // Bibliotecas normalizadas: evita contar dos veces la misma carpeta (c:/ vs C:\)
   const libs = new Map([[norm(sp), sp]]);
   try {
-    const vdf = fs.readFileSync(path.join(sp, 'steamapps', 'libraryfolders.vdf'), 'utf8');
+    const vdf = await fs.promises.readFile(path.join(sp, 'steamapps', 'libraryfolders.vdf'), 'utf8');
     for (const m of vdf.matchAll(/"path"\s+"([^"]+)"/g)) {
       const p = m[1].replace(/\\\\/g, '\\');
       libs.set(norm(p), p);
@@ -54,38 +117,93 @@ async function scanSteam() {
   for (const lib of libs.values()) {
     const dir = path.join(lib, 'steamapps');
     let files = [];
-    try { files = fs.readdirSync(dir).filter(f => /^appmanifest_\d+\.acf$/.test(f)); } catch { continue; }
+    try { files = (await fs.promises.readdir(dir)).filter(f => /^appmanifest_\d+\.acf$/.test(f)); } catch { continue; }
     for (const f of files) {
       try {
-        const t = fs.readFileSync(path.join(dir, f), 'utf8');
+        const t = await fs.promises.readFile(path.join(dir, f), 'utf8');
         const id = /"appid"\s+"(\d+)"/.exec(t)?.[1];
         const name = /"name"\s+"([^"]+)"/.exec(t)?.[1];
         const inst = /"installdir"\s+"([^"]+)"/.exec(t)?.[1];
         if (!id || !name || id === '228980' || /^(Proton|Steam Linux Runtime|Steamworks)/i.test(name)) continue;
-        if (!apps.has(id)) apps.set(id, { id: 'steam:' + id, type: 'steam', name, appid: id, dir: inst ? path.join(dir, 'common', inst) : '' });
+        if (!apps.has(id)) apps.set(id, { id: 'steam:' + id, type: 'steam', name, appid: id, dir: inst ? path.join(dir, 'common', inst) : '', start: 'steam://rungameid/' + id });
       } catch {}
     }
   }
   return [...apps.values()];
 }
 
-function scanEpic() {
+async function scanEpic() {
   const dir = 'C:\\ProgramData\\Epic\\EpicGamesLauncher\\Data\\Manifests';
   const out = new Map();
   try {
-    for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.item'))) {
+    for (const f of (await fs.promises.readdir(dir)).filter(f => f.endsWith('.item'))) {
       try {
-        const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        const j = JSON.parse(await fs.promises.readFile(path.join(dir, f), 'utf8'));
         if (!j.DisplayName || !j.LaunchExecutable || !j.AppName) continue;
-        if (!out.has(j.AppName)) out.set(j.AppName, { id: 'epic:' + j.AppName, type: 'epic', name: j.DisplayName, dir: j.InstallLocation, exe: path.join(j.InstallLocation, j.LaunchExecutable) });
+        if (!out.has(j.AppName)) { const exe = path.join(j.InstallLocation, j.LaunchExecutable); out.set(j.AppName, { id: 'epic:' + j.AppName, type: 'epic', name: j.DisplayName, dir: j.InstallLocation, exe, start: exe }); }
       } catch {}
     }
   } catch {}
   return [...out.values()];
 }
 
-async function getGames() {
-  const all = [...await scanSteam(), ...scanEpic(), ...cfg.custom.map(c => ({ ...c, type: 'custom', dir: path.dirname(c.exe) }))];
+// ---------- Biblioteca en caché ----------
+// library.json guarda, por juego, su ruta de inicio (start) y su portada (cover). Se escanea al arrancar
+// y con la tecla S; lo que no cambió se queda como está (no se vuelve a tocar ni a descargar su portada).
+const libFile = () => path.join(userDir(), 'library.json');
+let lib = { scannedAt: 0, games: [] };
+function loadLib() {
+  try {
+    const j = JSON.parse(fs.readFileSync(libFile(), 'utf8'));
+    if (Array.isArray(j.games)) return { scannedAt: j.scannedAt || 0, games: j.games };
+  } catch {}
+  return { scannedAt: 0, games: [] };
+}
+let saveLibT = null;
+function saveLib() {
+  clearTimeout(saveLibT);
+  saveLibT = setTimeout(() => {
+    try { fs.mkdirSync(userDir(), { recursive: true }); fs.writeFileSync(libFile(), JSON.stringify(lib, null, 1)); } catch {}
+  }, 800);
+}
+const sigOf = g => [g.id, g.name, g.start || '', g.dir || ''].join('|');
+
+let scanP = null;
+const scan = () => scanP || (scanP = doScan().finally(() => { scanP = null; }));
+
+async function doScan() {
+  const found = [...await scanSteam(), ...await scanEpic()];
+  const old = new Map(lib.games.map(g => [g.id, g]));
+  const now = new Set(found.map(g => g.id));
+  let added = 0, changed = 0, removed = 0;
+  for (const g of found) {
+    const o = old.get(g.id);
+    if (!o) added++;
+    else {
+      if (sigOf(o) !== sigOf(g)) changed++;
+      if (o.cover) g.cover = o.cover;            // conserva la portada ya guardada
+    }
+  }
+  for (const id of old.keys()) if (!now.has(id)) removed++;
+  lib = { scannedAt: Date.now(), games: found };
+  if (added || changed || removed || !fs.existsSync(libFile())) saveLib();
+  coverFail.clear();
+  prefetchCovers([...found, ...cfg.custom.map(c => ({ ...c, type: 'custom' }))]);   // solo tras pulsar S: las portadas que faltan
+  return { added, changed, removed, total: found.length };
+}
+
+async function prefetchCovers(list) {
+  for (const g of list) {
+    if (fs.existsSync(coverFile(g.id))) continue;
+    const url = await getCover(g).catch(() => null);
+    if (url && win && !win.isDestroyed()) win.webContents.send('cover', { id: g.id, url });
+  }
+}
+// La interfaz pide portadas solo de la caché del disco: nunca descarga nada por su cuenta
+const cachedCover = item => { const f = coverFile(item.id); return fs.existsSync(f) ? fileUrl(f) : null; };
+
+function listGames() {
+  const all = [...lib.games, ...cfg.custom.map(c => ({ ...c, type: 'custom', dir: path.dirname(c.exe), start: c.exe }))];
   const seen = new Set(), out = [];
   for (const g of all) {
     const keys = ['n:' + nkey(g.name)];
@@ -102,6 +220,19 @@ const safe = id => id.replace(/[^a-z0-9_-]/gi, '_');
 const coverFile = id => path.join(coversDir(), safe(id) + '.jpg');
 const fileUrl = f => 'file:///' + f.replace(/\\/g, '/');
 
+// Las portadas se guardan como mucho a 600x900: una imagen enorme pesa en la GPU aunque se vea pequeña
+function shrink(buf) {
+  try {
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return buf;
+    const { width, height } = img.getSize();
+    if (width <= 600 && height <= 900 && buf.length < 300e3) return buf;
+    const k = Math.min(1, 600 / width, 900 / height);
+    const out = k < 1 ? img.resize({ width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)), quality: 'good' }) : img;
+    const jpg = out.toJPEG(88);
+    return jpg.length < buf.length ? jpg : buf;
+  } catch { return buf; }
+}
 async function download(url, headers = {}) {
   const r = await fetch(url, { headers });
   if (!r.ok) throw new Error(r.status);
@@ -119,33 +250,75 @@ async function steamGridCover(name) {
   return url ? download(url) : null;
 }
 
-async function getCover(item) {
-  const f = coverFile(item.id);
-  if (fs.existsSync(f)) return fileUrl(f);
-  fs.mkdirSync(coversDir(), { recursive: true });
-  let buf = null;
+// Tienda de Steam (sin clave): solo se acepta si el nombre coincide exactamente, para no poner portadas equivocadas
+async function steamStoreCover(name) {
+  const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(name), { signal: AbortSignal.timeout(6000) })).json();
+  const hit = (r.items || []).find(x => x.type === 'app' && nkey(x.name) === nkey(name));
+  if (!hit) return null;
+  const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${hit.id}/`;
+  for (const n of ['library_600x900.jpg', 'header.jpg']) { try { return await download(base + n); } catch {} }
+  return null;
+}
+
+// Imagen junto al .exe: cover / portada / poster / folder / boxart...
+function localCover(exe) {
+  const dir = path.dirname(exe), names = ['cover', 'portada', 'poster', 'folder', 'boxart', 'capsule', 'library_600x900'];
   try {
-    if (item.type === 'steam') {
-      const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${item.appid}/`;
-      for (const n of ['library_600x900.jpg', 'header.jpg']) {
-        try { buf = await download(base + n); break; } catch {}
-      }
-    }
-    if (!buf) buf = await steamGridCover(item.name);
-    if (!buf && item.exe) {
-      const icon = await app.getFileIcon(item.exe, { size: 'large' });
-      if (!icon.isEmpty()) buf = icon.toPNG();
+    const files = fs.readdirSync(dir);
+    for (const n of names) {
+      const f = files.find(x => { const e = path.extname(x).toLowerCase(); return ['.jpg', '.jpeg', '.png', '.webp'].includes(e) && path.basename(x, e).toLowerCase() === n; });
+      if (f) return fs.readFileSync(path.join(dir, f));
     }
   } catch {}
-  if (!buf) return null;
-  fs.writeFileSync(f, buf);
-  return fileUrl(f);
+  return null;
+}
+
+// Máximo 4 portadas a la vez: al importar una carpeta grande no se lanzan cientos de peticiones juntas
+let coverActive = 0; const coverQ = [];
+const coverSlot = () => new Promise(res => { if (coverActive < 4) { coverActive++; res(); } else coverQ.push(res); });
+const coverFree = () => { const n = coverQ.shift(); if (n) n(); else coverActive--; };
+
+const coverFail = new Set(), coverBusy = new Map();
+function getCover(item) {
+  const f = coverFile(item.id);
+  if (fs.existsSync(f)) return Promise.resolve(fileUrl(f));
+  if (coverFail.has(item.id)) return Promise.resolve(null);     // ya falló en esta sesión; S lo reintenta
+  if (!coverBusy.has(item.id)) coverBusy.set(item.id, fetchCover(item, f).finally(() => coverBusy.delete(item.id)));
+  return coverBusy.get(item.id);
+}
+
+async function fetchCover(item, f) {
+  await coverSlot();
+  try {
+    fs.mkdirSync(coversDir(), { recursive: true });
+    let buf = null;
+    try {
+      if (item.type === 'steam') {
+        const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${item.appid}/`;
+        for (const n of ['library_600x900.jpg', 'header.jpg']) {
+          try { buf = await download(base + n); break; } catch {}
+        }
+      }
+      if (!buf && item.type === 'custom' && item.exe) buf = localCover(item.exe);
+      if (!buf) { try { buf = await steamGridCover(item.name); } catch {} }
+      if (!buf && item.type === 'custom') { try { buf = await steamStoreCover(item.name); } catch {} }
+      if (!buf && item.exe) {
+        const icon = await app.getFileIcon(item.exe, { size: 'large' });
+        if (!icon.isEmpty()) buf = icon.toPNG();
+      }
+    } catch {}
+    if (!buf) { coverFail.add(item.id); return null; }
+    fs.writeFileSync(f, shrink(buf));
+    const g = lib.games.find(x => x.id === item.id);
+    if (g && g.cover !== f) { g.cover = f; saveLib(); }
+    return fileUrl(f);
+  } finally { coverFree(); }
 }
 
 // ---------- Estadísticas del sistema (solo mientras el launcher está visible) ----------
 const run = (cmd, args, t = 2500) => new Promise(r => execFile(cmd, args, { timeout: t, windowsHide: true }, (e, o) => r(e ? null : String(o))));
 let prevCpu = os.cpus().map(c => ({ ...c.times }));
-let statsTimer = null, busy = false, nv, tp, lhmDown = 0;
+let statsTimer = null, busy = false, nv, lhmDown = 0;
 
 function cpuUse() {
   const cur = os.cpus();
@@ -160,23 +333,19 @@ function cpuUse() {
   return total > 0 ? Math.round(100 * (1 - idle / total)) : 0;
 }
 
+let nvAt = 0, nvLast = null;
 async function nvidia() {
   if (nv === false) return null;
+  if (Date.now() - nvAt < 5000) return nvLast;        // nvidia-smi es un proceso externo: como mucho cada 5 s, para no provocar tirones
+  nvAt = Date.now();
   const o = await run('nvidia-smi', ['--query-gpu=utilization.gpu,temperature.gpu', '--format=csv,noheader,nounits']);
   if (!o) { nv = false; return null; }
   const [use, temp] = o.trim().split(/\r?\n/)[0].split(',').map(s => parseFloat(s));
   nv = true;
-  return { use: isFinite(use) ? use : null, temp: isFinite(temp) ? temp : null };
+  return (nvLast = { use: isFinite(use) ? use : null, temp: isFinite(temp) ? temp : null });
 }
 
-// Recorre el árbol JSON de LibreHardwareMonitor guardando también el icono de cada hardware (cpu / gpu)
-function walk(n, trail, out) {
-  const p = [...trail, { text: n.Text || '', img: String(n.ImageURL || '').toLowerCase() }];
-  if (n.Children?.length) n.Children.forEach(c => walk(c, p, out));
-  else out.push({ path: p.map(x => x.text), imgs: p.map(x => x.img), text: n.Text, value: n.Value });
-}
 const num = v => { const x = parseFloat(String(v).replace(',', '.')); return isFinite(x) ? x : null; };
-const okTemp = v => v != null && v > 0 && v < 125;
 
 // LibreHardwareMonitor / OpenHardwareMonitor con "Remote Web Server" (puerto 8085).
 // Se usa 127.0.0.1 y no "localhost": en Node/Electron nuevos "localhost" puede resolver a ::1 y no conectar.
@@ -184,76 +353,28 @@ async function lhm() {
   if (Date.now() < lhmDown) return null;
   try {
     const j = await (await fetch('http://127.0.0.1:8085/data.json', { signal: AbortSignal.timeout(1200) })).json();
-    const s = [];
-    walk(j, [], s);
-    const temps = s.filter(v => v.path.includes('Temperatures'));
-    const inHw = (v, re) => v.imgs.some(i => re.test(i));
-    const cpuT = temps.filter(v => inHw(v, /cpu/));
-    const first = (list, res) => { for (const re of res) { const x = list.find(v => re.test(v.text)); if (x && okTemp(num(x.value))) return num(x.value); } return null; };
-    let cpuTemp = first(cpuT, [/^CPU Package$/i, /^Core \(Tctl\/Tdie\)$/i, /^Core \(Tctl\)$/i, /^Core \(Tdie\)$/i, /^Core Max$/i, /^CPU \(Tctl\/Tdie\)$/i, /^CPU Die/i, /^CPU$/i, /^Core Average$/i]);
-    if (cpuTemp == null) {
-      // Cualquier sensor de temperatura de la CPU (CPU Core #1, CCD1, etc.): el más alto
-      const vals = cpuT.map(v => num(v.value)).filter(okTemp);
-      if (vals.length) cpuTemp = Math.max(...vals);
-    }
-    const gpuT = temps.filter(v => inHw(v, /nvidia|ati|amd|gpu|intel/) && !inHw(v, /cpu/));
-    const gpuTemp = first(gpuT, [/^GPU Core$/i, /^GPU Hot Spot$/i]);
-    const gx = s.find(v => v.path.includes('Load') && /^GPU Core$/i.test(v.text));
-    return { cpuTemp, gpuTemp, gpuUse: gx ? num(gx.value) : null };
+    return parseLhm(j);
   } catch { lhmDown = Date.now() + 15000; return null; }
 }
 
-// Respaldo sin programas extra: zonas térmicas de Windows (funciona en muchos portátiles y algunas placas).
-// Se ejecuta en segundo plano, como mucho cada 8 s, y se desactiva solo si nunca da datos.
-let wmiTemp = null, wmiAt = 0, wmiBusy = false, wmiFails = 0;
-function refreshWmi() {
-  if (wmiBusy || wmiFails >= 3 || Date.now() - wmiAt < 8000) return;
-  wmiBusy = true; wmiAt = Date.now();
-  const ps = "$t=@(); " +
-    "try{$t+=Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -EA Stop | %{$_.CurrentTemperature/10-273.15}}catch{}; " +
-    "try{$t+=Get-CimInstance Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA Stop | %{$_.Temperature-273.15}}catch{}; " +
-    "$t -join ','";
-  run('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], 7000).then(o => {
-    const vals = (o || '').trim().split(',').map(num).filter(okTemp);
-    if (vals.length) { wmiTemp = Math.max(...vals); wmiFails = 0; } else { wmiTemp = null; wmiFails++; }
-  }).finally(() => { wmiBusy = false; });
-}
-
-// Uso de GPU genérico (AMD/Intel) con contadores de Windows. Es una consulta pesada:
-// va en segundo plano, como mucho cada 6 s, y nunca bloquea el ciclo de estadísticas.
-let tpVal = null, tpAt = 0, tpBusy = false;
-function refreshTypeperf() {
-  if (tp === false || tpBusy || Date.now() - tpAt < 6000) return;
-  tpBusy = true; tpAt = Date.now();
-  run('typeperf', ['\\GPU Engine(*engtype_3D)\\Utilization Percentage', '-sc', '1'], 5000).then(o => {
-    const line = o && o.split(/\r?\n/).filter(l => l.startsWith('"'))[1];
-    if (!line) { tp = false; tpVal = null; return; }
-    const sum = line.split('","').slice(1).map(v => parseFloat(v.replace(/"/g, '').replace(',', '.'))).filter(isFinite).reduce((a, b) => a + b, 0);
-    tp = true; tpVal = Math.min(100, Math.round(sum));
-  }).finally(() => { tpBusy = false; });
-}
-
 async function tick() {
-  if (busy || !win || !win.isVisible()) return;
+  if (busy || paused || !win || !win.isVisible()) return;
   busy = true;
   try {
-    const cpu = { use: cpuUse(), temp: null };
+    const cpu = { use: cpuUse() };
     const total = os.totalmem();
     const ram = { used: total - os.freemem(), total };
     let gpu = { use: null, temp: null };
     const [n, l] = await Promise.all([nvidia(), lhm()]);   // en paralelo, no uno tras otro
     if (n) gpu = n;
     if (l) {
-      cpu.temp = l.cpuTemp;
       if (gpu.use == null) gpu.use = l.gpuUse;
       if (gpu.temp == null) gpu.temp = l.gpuTemp;
     }
-    if (cpu.temp == null) { refreshWmi(); cpu.temp = wmiTemp; }
-    if (gpu.use == null) { refreshTypeperf(); gpu.use = tpVal; }
     if (win && win.isVisible()) win.webContents.send('stats', { cpu, ram, gpu });
   } finally { busy = false; }
 }
-function startStats() { if (!statsTimer) { tick(); statsTimer = setInterval(tick, 2000); } }
+function startStats() { if (!statsTimer && !paused) { tick(); statsTimer = setInterval(tick, 2000); } }
 function stopStats() { clearInterval(statsTimer); statsTimer = null; }
 
 // ---------- Ventana ----------
@@ -266,35 +387,283 @@ function createWin() {
   win.loadFile('index.html');
   win.on('close', e => { if (!app.isQuitting) { e.preventDefault(); hideLauncher(); } });
 }
+// Al ocultar se espera ~190 ms para que la interfaz haga su animación de salida antes de esconder la ventana
+let hideT = null;
 function showLauncher() {
   if (!win) return;
+  clearTimeout(hideT); hideT = null;
+  if (paused) { resumeLauncher(true); return; }     // ya estaba visible detrás de otro programa: solo estaba congelado
   win.show(); win.focus();
   win.webContents.send('enter');
   startStats();
+  syncTaskbar();
 }
 function hideLauncher() {
-  if (!win) return;
-  stopStats();
+  if (!win || !win.isVisible() || hideT) return;
+  if (paused) resumeLauncher(false);
+  stopStats(); clearTimeout(launchT); launchT = null;
   win.webContents.send('leave');
-  win.hide();
+  hideT = setTimeout(() => { hideT = null; if (win && !win.isDestroyed()) win.hide(); }, 190);
+  syncTaskbar();                                    // el launcher se oculta a propósito (Esc): la barra de tareas vuelve para usar el escritorio
 }
-function toggle() { win.isVisible() ? hideLauncher() : showLauncher(); }
+
+// ---------- Pausa del launcher y barra de tareas ----------
+// Un único PowerShell vive toda la sesión y hace dos cosas:
+//  1) Avisa de quién tiene el primer plano (SELF = el launcher, OTHER = otro programa, NONE = escritorio/nadie).
+//     Es por eventos (SetWinEventHook): no sondea, así que en reposo gasta 0. Un temporizador de seguridad cada 2 s lo revalida, y la barra se vuelve a ocultar al instante si el Explorador la muestra.
+//  2) Mantiene oculta la barra de tareas de Windows mientras el launcher está en pantalla, y la restaura siempre al salir
+//     (también si el launcher se cierra a la fuerza: al cerrarse la tubería de entrada el ayudante la vuelve a mostrar).
+// Mientras otro programa está delante, el launcher queda PAUSADO: la ventana sigue ahí detrás con su último fotograma
+// (por eso reaparece al instante al cerrar el programa) pero sin fondo animado, sin mando, sin reloj, sin estadísticas y con prioridad mínima.
+const SHELL_PS = `param([int]$self)
+Add-Type -TypeDefinition @\"
+using System;
+using System.Text;
+using System.Threading;
+using System.Runtime.InteropServices;
+public static class SH {
+  [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int x; public int y; }
+  delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int idObj, int idChild, uint thread, uint time);
+  delegate void TimerProc(IntPtr hwnd, uint msg, UIntPtr id, uint time);
+  [DllImport(\"user32.dll\")] static extern IntPtr SetWinEventHook(uint a, uint b, IntPtr mod, WinEventProc p, uint pid, uint tid, uint flags);
+  [DllImport(\"user32.dll\")] static extern UIntPtr SetTimer(IntPtr h, UIntPtr id, uint ms, TimerProc p);
+  [DllImport(\"user32.dll\")] static extern bool KillTimer(IntPtr h, UIntPtr id);
+  [DllImport(\"user32.dll\")] static extern bool UnhookWinEvent(IntPtr h);
+  [DllImport(\"user32.dll\")] static extern int GetMessage(out MSG m, IntPtr h, uint a, uint b);
+  [DllImport(\"user32.dll\")] static extern bool TranslateMessage(ref MSG m);
+  [DllImport(\"user32.dll\")] static extern IntPtr DispatchMessage(ref MSG m);
+  [DllImport(\"user32.dll\")] static extern IntPtr GetForegroundWindow();
+  [DllImport(\"user32.dll\")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string c, string t);
+  [DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string t);
+  [DllImport(\"user32.dll\")] static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport(\"user32.dll\")] static extern bool IsWindowVisible(IntPtr h);
+
+  static uint self; static string last = \"\"; static volatile bool tb;
+  static WinEventProc wep; static TimerProc tp, bp;
+  static IntPtr showHook; static uint hookPid; static UIntPtr burstId; static int burstLeft, hideWin, hideCnt;
+
+  static string Classify() {
+    IntPtr h = GetForegroundWindow(); if (h == IntPtr.Zero) return \"NONE\";
+    StringBuilder sb = new StringBuilder(64); GetClassName(h, sb, 64);
+    string c = sb.ToString();
+    if (c == \"Progman\" || c == \"WorkerW\" || c == \"Shell_TrayWnd\" || c == \"Shell_SecondaryTrayWnd\") return \"NONE\";
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    return pid == self ? \"SELF\" : \"OTHER\";
+  }
+  // show=false oculta la barra (y las de los demas monitores); show=true la devuelve
+  static void Tb(bool show) {
+    IntPtr h = FindWindow(\"Shell_TrayWnd\", null);
+    if (h != IntPtr.Zero && IsWindowVisible(h) != show) ShowWindow(h, show ? 5 : 0);
+    IntPtr s = IntPtr.Zero;
+    while ((s = FindWindowEx(IntPtr.Zero, s, \"Shell_SecondaryTrayWnd\", null)) != IntPtr.Zero)
+      if (IsWindowVisible(s) != show) ShowWindow(s, show ? 5 : 0);
+  }
+  static void Check() {
+    try {
+      if (tb) Tb(false);                                   // si Windows la vuelve a mostrar, se oculta de nuevo
+      string s = Classify();
+      if (s != last) { last = s; Console.WriteLine(s); Console.Out.Flush(); }
+    } catch {}
+  }
+  // El Explorador vuelve a mostrar la barra DESPUES del cambio de ventana, asi que no basta con ocultarla en ese aviso:
+  //  - EVENT_OBJECT_SHOW de explorer.exe: si la barra se muestra, se oculta en el acto (por eventos, gasta 0 en reposo)
+  //  - tras cada cambio de ventana, una rafaga de comprobaciones (10 x 80 ms) por si reaparece sin evento
+  static uint ExplorerPid() {
+    IntPtr h = FindWindow(\"Shell_TrayWnd\", null); uint pid = 0;
+    if (h != IntPtr.Zero) GetWindowThreadProcessId(h, out pid);
+    return pid;
+  }
+  static void Rehook() {
+    try {
+      uint ep = ExplorerPid();
+      if (ep == 0 || ep == hookPid) return;                 // sin explorer aun, o ya enganchado
+      if (showHook != IntPtr.Zero) UnhookWinEvent(showHook);
+      showHook = SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, wep, ep, 0, 0);   // EVENT_OBJECT_SHOW solo de explorer
+      hookPid = showHook != IntPtr.Zero ? ep : 0;
+    } catch {}
+  }
+  static void OnShow(IntPtr hwnd, int idObj) {
+    if (!tb || idObj != 0 || hwnd == IntPtr.Zero) return;
+    try {
+      StringBuilder sb = new StringBuilder(32); GetClassName(hwnd, sb, 32);
+      string c = sb.ToString();
+      if (c != \"Shell_TrayWnd\" && c != \"Shell_SecondaryTrayWnd\") return;
+      int now = Environment.TickCount;                       // freno: si Windows insiste en mostrarla sin parar, no se entra en bucle
+      if (now - hideWin > 1000) { hideWin = now; hideCnt = 0; }
+      if (++hideCnt > 40) return;
+      ShowWindow(hwnd, 0);
+    } catch {}
+  }
+  static void StartBurst() {
+    if (!tb) return;
+    burstLeft = 10;
+    if (burstId == UIntPtr.Zero) burstId = SetTimer(IntPtr.Zero, UIntPtr.Zero, 80, bp);
+  }
+  static void OnBurst(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
+    try { if (tb) Tb(false); } catch {}
+    if (--burstLeft <= 0 || !tb) { KillTimer(IntPtr.Zero, burstId); burstId = UIntPtr.Zero; }
+  }
+  static void OnEvt(IntPtr hook, uint ev, IntPtr hwnd, int idObj, int idChild, uint thread, uint time) {
+    if (ev == 3) { Check(); StartBurst(); }
+    else OnShow(hwnd, idObj);
+  }
+  static void OnTimer(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
+    try { System.Diagnostics.Process.GetProcessById((int)self); }
+    catch (ArgumentException) { Restore(); Environment.Exit(0); }
+    Rehook();                                              // por si explorer.exe se reinicio
+    Check();
+  }
+  static void ReadCmds() {
+    try {
+      string l;
+      while ((l = Console.In.ReadLine()) != null) {
+        l = l.Trim();
+        if (l == \"TB 1\") { tb = true; Tb(false); StartBurst(); }
+        else if (l == \"TB 0\") { tb = false; Tb(true); }
+        else if (l == \"QUIT\") break;
+      }
+    } catch {}
+    Restore();                                             // fin de la tuberia = el launcher termino: la barra de tareas vuelve
+    Environment.Exit(0);
+  }
+  public static void Restore() { try { tb = false; Tb(true); } catch {} }
+  public static void Run(uint selfPid) {
+    self = selfPid;
+    wep = new WinEventProc(OnEvt); tp = new TimerProc(OnTimer); bp = new TimerProc(OnBurst);
+    AppDomain.CurrentDomain.ProcessExit += (a, b) => Restore();
+    Thread t = new Thread(ReadCmds); t.IsBackground = true; t.Start();
+    SetWinEventHook(3, 3, IntPtr.Zero, wep, 0, 0, 0);       // EVENT_SYSTEM_FOREGROUND, fuera de proceso
+    SetTimer(IntPtr.Zero, UIntPtr.Zero, 2000, tp);
+    Rehook();
+    Check();
+    MSG m;
+    while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { TranslateMessage(ref m); DispatchMessage(ref m); }
+  }
+}
+\"@
+try { [SH]::Run([uint32]$self) } finally { [SH]::Restore() }
+`;
+
+let shellProc = null, shellBuf = '', shellRestarts = 0, tbWanted = false;
+let paused = false, launchT = null, noneT = null;
+
+const shellSend = line => { try { if (shellProc) shellProc.stdin.write(line + '\n'); } catch {} };
+function startShell() {
+  if (process.platform !== 'win32' || shellProc) return;
+  const f = path.join(os.tmpdir(), 'pslauncher-shell.ps1');
+  try { fs.writeFileSync(f, SHELL_PS); } catch { return; }
+  let p;
+  try {
+    p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', f, '-self', String(process.pid)],
+      { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+  } catch { return; }
+  shellProc = p; shellBuf = '';
+  p.stdin.on('error', () => {});
+  p.on('error', () => { if (shellProc === p) shellDown(); });
+  p.on('exit', () => { if (shellProc === p) shellDown(); });
+  p.stdout.on('data', d => {
+    shellBuf += d;
+    let i;
+    while ((i = shellBuf.indexOf('\n')) >= 0) {
+      const l = shellBuf.slice(0, i).trim(); shellBuf = shellBuf.slice(i + 1);
+      if (l === 'SELF' || l === 'OTHER' || l === 'NONE') onForeground(l);
+    }
+  });
+  shellSend('TB ' + (tbWanted ? 1 : 0));
+}
+// Si el ayudante muere, el launcher nunca se queda congelado sin nadie que lo despierte
+function shellDown() {
+  shellProc = null;
+  if (paused) resumeLauncher(true);
+  if (!app.isQuitting && ++shellRestarts <= 3) setTimeout(startShell, 3000);
+}
+function stopShell() {
+  shellSend('QUIT');                                   // el ayudante restaura la barra de tareas por su cuenta aunque este proceso ya haya terminado
+  try { if (shellProc) shellProc.stdin.end(); } catch {}
+  shellProc = null;
+}
+// La barra de tareas solo se oculta mientras el launcher esté en pantalla (y la opción esté activada)
+function syncTaskbar() {
+  const want = process.platform === 'win32' && cfg.hideTaskbar !== false && !!win && !win.isDestroyed() && win.isVisible() && !hideT;
+  if (want === tbWanted) return;
+  tbWanted = want;
+  shellSend('TB ' + (want ? 1 : 0));
+}
+
+// Solo bajan de prioridad los procesos de la interfaz y la GPU; el principal no, para que el atajo y el ayudante respondan siempre
+function lowPrio(on) {
+  try {
+    const p = on ? os.constants.priority.PRIORITY_LOW : os.constants.priority.PRIORITY_NORMAL;
+    for (const m of app.getAppMetrics()) if (m.type !== 'Browser') { try { os.setPriority(m.pid, p); } catch {} }
+  } catch {}
+}
+function pauseLauncher() {
+  if (paused || !win || win.isDestroyed() || !win.isVisible() || hideT) return;
+  paused = true;
+  stopStats();
+  clearTimeout(launchT); launchT = null;
+  win.webContents.send('pause');
+  lowPrio(true);
+}
+function resumeLauncher(front) {
+  if (!paused) return;
+  paused = false;
+  clearTimeout(noneT); noneT = null;
+  lowPrio(false);
+  if (win && !win.isDestroyed()) {
+    if (front) { win.show(); win.focus(); }
+    win.webContents.send('resume');
+  }
+  startStats();
+  syncTaskbar();
+}
+function onForeground(s) {
+  clearTimeout(noneT); noneT = null;
+  if (!win || win.isDestroyed() || !win.isVisible() || hideT) return;   // el launcher está oculto a propósito: no se toca
+  if (s === 'OTHER') pauseLauncher();
+  else if (s === 'SELF') resumeLauncher(false);
+  // NONE: nadie tiene el foco (se acaba de cerrar el programa). Se espera 0,4 s por si Windows activa otra ventana; si no, el launcher pasa al frente
+  else if (paused) noneT = setTimeout(() => { noneT = null; resumeLauncher(true); }, 400);
+}
+function toggle() { if (paused) showLauncher(); else win.isVisible() && !hideT ? hideLauncher() : showLauncher(); }
+function notifyLibrary() { if (win && !win.isDestroyed()) win.webContents.send('library'); }
+// Inicio con Windows. En la versión portable el .exe real es PORTABLE_EXECUTABLE_FILE (process.execPath apunta a una carpeta temporal).
+// "Minimizado" solo aplica al arranque de Windows: se pasa --hidden en el registro, un doble clic normal siempre abre el launcher.
+function applyAutostart() {
+  if (!app.isPackaged) return;
+  try {
+    app.setLoginItemSettings({ openAtLogin: !!cfg.autostart, path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: cfg.minimized ? ['--hidden'] : [] });
+  } catch {}
+}
 function registerHotkey() {
   globalShortcut.unregisterAll();
   try { globalShortcut.register(cfg.hotkey, toggle); } catch {}
 }
 
 // ---------- IPC ----------
-ipcMain.handle('games', getGames);
-ipcMain.handle('cover', (e, item) => getCover(item));
+// Sin escaneos automáticos: solo se lee la biblioteca guardada. Para buscar juegos nuevos: tecla S (o LB en el mando).
+ipcMain.handle('games', () => listGames());
+ipcMain.handle('rescan', async () => {
+  const r = await scan();
+  notifyLibrary();
+  return r;
+});
+ipcMain.handle('cover', (e, item) => cachedCover(item));
 
 ipcMain.handle('launch', (e, item) => {
   cfg.recent[item.id] = Date.now();
   saveCfg();
   if (item.type === 'steam') shell.openExternal('steam://rungameid/' + item.appid);
   else if (item.exe) spawn(item.exe, [], { detached: true, stdio: 'ignore', cwd: path.dirname(item.exe) }).unref();
-  hideLauncher();
+  // El launcher sigue visible ("Iniciando…") hasta que otro programa pasa al primer plano: entonces se pausa solo.
+  // Si en 2 min no aparece nada, la interfaz vuelve a la normalidad. Sin ayudante (no Windows / PowerShell bloqueado) se oculta como antes.
+  clearTimeout(launchT);
+  if (shellProc) launchT = setTimeout(() => { launchT = null; if (win && !win.isDestroyed()) win.webContents.send('launch-end'); }, 120000);
+  else hideLauncher();
 });
+ipcMain.handle('cancelLaunch', () => { clearTimeout(launchT); launchT = null; });
 
 ipcMain.handle('add', async () => {
   const r = await dialog.showOpenDialog(win, {
@@ -305,13 +674,84 @@ ipcMain.handle('add', async () => {
   const exe = r.filePaths[0];
   const name = path.basename(exe).replace(/\.[^.]+$/, '');
   if (cfg.custom.some(c => norm(c.exe) === norm(exe))) return { status: 'dup', name };
-  const id = 'custom:' + Date.now();
+  const id = customId(exe);
   cfg.custom.push({ id, name, exe });
   // si coincide con un juego ya detectado, no se añade
-  if (!(await getGames()).some(g => g.id === id)) { cfg.custom.pop(); return { status: 'dup', name }; }
+  if (!listGames().some(g => g.id === id)) { cfg.custom.pop(); return { status: 'dup', name }; }
   saveCfg();
+  prefetchCovers([{ id, type: 'custom', name, exe }]);
   return { status: 'added', id };
 });
+
+ipcMain.handle('addFolder', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Elige la carpeta con tus juegos', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return { status: 'cancel' };
+  const root = r.filePaths[0];
+  const exes = await findExes(root, 0, []);
+  if (!exes.length) return { status: 'empty' };
+
+  const have = new Set();                                     // lo que ya está en la lista (nombre o .exe)
+  for (const g of listGames()) { have.add('n:' + nkey(g.name)); if (g.exe) have.add('e:' + norm(g.exe)); }
+  const batch = new Set(), fresh = [];
+  let added = 0, dup = 0, firstId = null;
+  for (const exe of exes) {
+    if (have.has('e:' + norm(exe))) { dup++; continue; }
+    let name = nameFromExe(exe), k = 'n:' + nkey(name);
+    if (batch.has(k)) { name = path.basename(path.dirname(exe)); k = 'n:' + nkey(name); }   // dos "game.exe": el segundo toma el nombre de su carpeta
+    if (have.has(k) || batch.has(k)) { dup++; continue; }
+    const id = customId(exe);
+    cfg.custom.push({ id, name, exe, folder: root });
+    fresh.push({ id, type: 'custom', name, exe });
+    batch.add(k); have.add('e:' + norm(exe));
+    firstId = firstId || id; added++;
+  }
+  if (added) { saveCfg(); prefetchCovers(fresh); }
+  return { status: added ? 'added' : 'dup', added, dup, id: firstId };
+});
+
+// Carpetas importadas: se listan a partir de los juegos que trajeron; quitar una carpeta quita todos sus juegos
+ipcMain.handle('folders', () => {
+  const m = new Map();
+  for (const c of cfg.custom) if (c.folder) m.set(c.folder, (m.get(c.folder) || 0) + 1);
+  return [...m].map(([p, count]) => ({ path: p, count })).sort((a, b) => a.path.localeCompare(b.path));
+});
+ipcMain.handle('removeFolder', (e, folder) => {
+  const gone = cfg.custom.filter(c => c.folder === folder);
+  cfg.custom = cfg.custom.filter(c => c.folder !== folder);
+  for (const c of gone) { delete cfg.recent[c.id]; try { fs.unlinkSync(coverFile(c.id)); } catch {} }
+  saveCfg();
+  return gone.length;
+});
+ipcMain.handle('gpuInfo', () => { try { const g = app.getGPUFeatureStatus(); return `modo ${cfg.gpuMode || 'auto'} · compositing ${g.gpu_compositing} · raster ${g.rasterization}`; } catch { return ''; } });
+
+// ----- Optimización automática de gráficos -----
+function relaunchApp() {
+  app.isQuitting = true;
+  stopShell();
+  const args = process.argv.slice(1).filter(a => a !== '--hidden');
+  const exe = process.env.PORTABLE_EXECUTABLE_FILE;        // portable: el .exe real, no la carpeta temporal
+  app.relaunch(exe ? { execPath: exe, args } : { args });
+  setTimeout(() => app.exit(0), 150);
+}
+ipcMain.handle('tuneState', () => ({ done: !!cfg.tune?.done, mode: cfg.gpuMode || 'auto', tried: cfg.tune?.tried || {} }));
+ipcMain.handle('perf', (e, p) => {
+  const fps = Number(p && p.fps);
+  const t = cfg.tune || (cfg.tune = { done: false, tried: {} });
+  if (t.done || !isFinite(fps)) return { action: 'none' };
+  const cur = cfg.gpuMode || 'auto';
+  t.tried[cur] = Math.round(fps); t.pending = false;
+  const next = GPU_MODES.find(m => !(m.id in t.tried));
+  if (fps >= 52 || !next) {                                  // suficiente (o no quedan modos): se queda con el mejor
+    const best = Object.entries(t.tried).sort((a, b) => b[1] - a[1])[0][0];
+    t.done = true;
+    if (best !== cur) { cfg.gpuMode = best; t.pending = true; saveCfg(); relaunchApp(); return { action: 'restart', mode: best }; }
+    saveCfg();
+    return { action: 'done', mode: cur, fps };
+  }
+  cfg.gpuMode = next.id; t.pending = true; saveCfg(); relaunchApp();
+  return { action: 'restart', mode: next.id };
+});
+ipcMain.handle('retune', () => { cfg.tune = { done: false, tried: {}, pending: true }; cfg.gpuMode = 'auto'; saveCfg(); relaunchApp(); });
 
 ipcMain.handle('remove', (e, id) => {
   cfg.custom = cfg.custom.filter(c => c.id !== id);
@@ -327,24 +767,35 @@ ipcMain.handle('setCover', async (e, id) => {
   });
   if (r.canceled || !r.filePaths[0]) return null;
   fs.mkdirSync(coversDir(), { recursive: true });
-  fs.copyFileSync(r.filePaths[0], coverFile(id));
+  fs.writeFileSync(coverFile(id), shrink(fs.readFileSync(r.filePaths[0])));
   return fileUrl(coverFile(id)) + '?t=' + Date.now();
 });
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, user: os.userInfo().username }));
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
   if (patch.layout === 'ps4' || patch.layout === 'center') cfg.layout = patch.layout;
+  if (typeof patch.bg === 'boolean') cfg.bg = patch.bg;
+  if (typeof patch.autostart === 'boolean') cfg.autostart = patch.autostart;
+  if (typeof patch.minimized === 'boolean') cfg.minimized = patch.minimized;
+  if (typeof patch.hideTaskbar === 'boolean') cfg.hideTaskbar = patch.hideTaskbar;
+  if (patch.padMaps && typeof patch.padMaps === 'object') cfg.padMaps = patch.padMaps;
   saveCfg();
+  if ('hideTaskbar' in patch) syncTaskbar();
+  if ('autostart' in patch || 'minimized' in patch) applyAutostart();
 });
 ipcMain.handle('hide', hideLauncher);
+ipcMain.handle('quit', () => { app.isQuitting = true; app.quit(); });
 
 // ---------- Arranque ----------
 app.on('second-instance', showLauncher);
 app.whenReady().then(() => {
+  if (!gotLock) return;
   cfg = loadCfg();
-  app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] });
+  lib = loadLib();
+  applyAutostart();     // vuelve a registrar la ruta actual por si moviste el .exe
   createWin();
+  startShell();
 
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')).resize({ width: 16, height: 16 }));
   tray.setToolTip('PS Launcher');
@@ -355,7 +806,10 @@ app.whenReady().then(() => {
   tray.on('click', toggle);
 
   registerHotkey();
-  win.webContents.once('did-finish-load', () => { if (!process.argv.includes('--hidden')) showLauncher(); });
+  win.webContents.once('did-finish-load', () => {
+    if (cfg.tune && cfg.tune.pending) { cfg.tune.pending = false; saveCfg(); }       // este modo gráfico arrancó bien
+    if (!process.argv.includes('--hidden')) showLauncher();
+  });
 });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => { globalShortcut.unregisterAll(); stopShell(); });
 app.on('window-all-closed', e => e.preventDefault());
