@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>PS Launcher</title>
+<style>
+  :root {
+    --bg1: #0b3fa8;
+    --bg2: #061a55;
+    --bg3: #02082a;
+    --tile-w: 220px;
+    --tile-h: 330px;
+    --gap: 44px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg3); color: #fff;
+    font-family: "Segoe UI Light", "Segoe UI", system-ui, sans-serif; user-select: none; }
+
+  #bg {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 30% 20%, var(--bg1), transparent 70%),
+      radial-gradient(ellipse 90% 70% at 80% 90%, #0a2a86, transparent 70%),
+      linear-gradient(160deg, var(--bg2), var(--bg3));
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift { to { filter: hue-rotate(-12deg) brightness(1.08); } }
+
+  #top { position: fixed; top: 0; left: 0; right: 0; height: 110px; padding: 36px 64px;
+    display: flex; justify-content: space-between; align-items: center; font-size: 30px; letter-spacing: .5px; }
+  #count { opacity: .75; font-size: 22px; }
+  #clock { font-size: 34px; }
+
+  #stage { position: fixed; left: 0; right: 0; top: 50%; height: var(--tile-h); margin-top: calc(var(--tile-h) / -2 - 30px); }
+  #row { position: absolute; left: 50%; top: 0; display: flex; gap: var(--gap);
+    transition: transform .22s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+
+  .tile { width: var(--tile-w); height: var(--tile-h); flex: none; position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #1a4fc0, #0a2a7a); box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    transition: transform .18s ease-out, box-shadow .18s ease-out; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; position: absolute; inset: 0; }
+  .tile .ph { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 18px;
+    font-size: 24px; line-height: 1.15; opacity: .9; }
+  .tile.sel { transform: scale(1.22); z-index: 2; box-shadow: 0 0 0 4px #fff, 0 18px 50px rgba(0,0,0,.55); }
+  .tile.special { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.08);
+    border: 2px dashed rgba(255,255,255,.45); box-shadow: none; }
+  .tile.special.sel { box-shadow: 0 0 0 4px #fff, 0 18px 50px rgba(0,0,0,.55); background: rgba(255,255,255,.16); }
+  .tile.special .plus { font-size: 96px; font-weight: 100; line-height: 1; }
+  .tile.special .lbl { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 22px; opacity: .9; }
+
+  #title { position: fixed; left: 0; right: 0; top: calc(50% + var(--tile-h) / 2 + 60px); text-align: center;
+    font-size: 44px; font-weight: 200; text-shadow: 0 2px 12px rgba(0,0,0,.5); }
+  #hint { position: fixed; bottom: 34px; left: 0; right: 0; text-align: center; font-size: 19px; opacity: .65; }
+
+  /* Animación de entrada: un solo movimiento, ~0.45 s */
+  body.enter #bg { animation: bgIn .45s ease-out, drift 18s ease-in-out .45s infinite alternate; }
+  body.enter #top { animation: fadeIn .35s ease-out both; }
+  body.enter #stage { animation: stageIn .45s cubic-bezier(.15,.9,.2,1) both; }
+  body.enter #title, body.enter #hint { animation: fadeIn .45s .12s ease-out both; }
+  @keyframes bgIn { from { opacity: 0; filter: brightness(2.2) blur(8px); } }
+  @keyframes fadeIn { from { opacity: 0; } }
+  @keyframes stageIn { from { opacity: 0; transform: translateY(46px) scale(.94); } }
+  @media (prefers-reduced-motion: reduce) { body.enter * { animation: none !important; } }
+
+  /* Ajustes */
+  #settings { position: fixed; inset: 0; background: rgba(2,8,42,.88); display: none;
+    align-items: center; justify-content: center; flex-direction: column; gap: 18px; z-index: 10; font-size: 22px; }
+  #settings.open { display: flex; }
+  #settings input { width: 560px; padding: 12px 16px; font-size: 20px; background: #0a2a7a; color: #fff;
+    border: 2px solid #fff; outline: none; user-select: text; }
+  #settings p { max-width: 560px; opacity: .75; font-size: 17px; line-height: 1.4; text-align: center; }
+</style>
+</head>
+<body class="enter">
+<div id="bg"></div>
+<div id="top"><div id="count"></div><div id="clock"></div></div>
+<div id="stage"><div id="row"></div></div>
+<div id="title"></div>
+<div id="hint">Enter: jugar &nbsp;&nbsp; C: cambiar portada &nbsp;&nbsp; Supr: quitar &nbsp;&nbsp; Esc: cerrar</div>
+
+<div id="settings">
+  <div>Clave de SteamGridDB (para portadas de juegos que no son de Steam)</div>
+  <input id="key" placeholder="Pega tu API key y pulsa Enter">
+  <p>Es gratis: crea una cuenta en steamgriddb.com y copia la clave en Preferencias → API. Esc para cerrar.</p>
+</div>
+
+<script>
+const ADD = { id: '_add', type: 'add', name: 'Añadir juego o aplicación' };
+const CFG = { id: '_cfg', type: 'cfg', name: 'Ajustes' };
+let items = [], sel = 0, covers = {};
+const row = document.getElementById('row');
+const TILE = 220 + 44;
+
+function fmtClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent = d.toTimeString().slice(0, 5);
+}
+setInterval(fmtClock, 10000); fmtClock();
+
+function buildTile(it, i) {
+  const t = document.createElement('div');
+  t.className = 'tile';
+  t.dataset.i = i;
+  if (it.type === 'add' || it.type === 'cfg') {
+    t.classList.add('special');
+    t.innerHTML = `<div class="plus">${it.type === 'add' ? '+' : '⚙'}</div><div class="lbl">${it.type === 'add' ? 'Añadir' : 'Ajustes'}</div>`;
+  } else {
+    const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = it.name; t.appendChild(ph);
+    const setImg = url => {
+      const old = t.querySelector('img'); if (old) old.remove();
+      const img = new Image(); img.src = url; img.draggable = false;
+      img.onload = () => { ph.style.display = 'none'; t.appendChild(img); };
+    };
+    if (covers[it.id]) setImg(covers[it.id]);
+    else window.api.cover(it).then(u => { if (u) { covers[it.id] = u; setImg(u); } });
+    t._setImg = setImg;
+  }
+  t.onclick = () => { sel = i; update(); activate(); };
+  return t;
+}
+
+function render() {
+  row.innerHTML = '';
+  items.forEach((it, i) => row.appendChild(buildTile(it, i)));
+  document.getElementById('count').textContent = (items.length - 2) + ' juegos';
+  update();
+}
+
+function update() {
+  sel = Math.max(0, Math.min(items.length - 1, sel));
+  [...row.children].forEach((t, i) => t.classList.toggle('sel', i === sel));
+  row.style.transform = `translateX(${-(sel * TILE + 110)}px)`;
+  document.getElementById('title').textContent = items[sel]?.name || '';
+}
+
+async function load() {
+  const games = await window.api.games();
+  items = [...games, ADD, CFG];
+  if (sel >= items.length) sel = 0;
+  render();
+}
+
+async function activate() {
+  const it = items[sel];
+  if (!it) return;
+  if (it.type === 'add') { if (await window.api.add()) { await load(); sel = items.length - 3; update(); } }
+  else if (it.type === 'cfg') openSettings();
+  else window.api.launch(it);
+}
+
+async function changeCover() {
+  const it = items[sel];
+  if (!it || it.type === 'add' || it.type === 'cfg') return;
+  const url = await window.api.setCover(it.id);
+  if (url) { covers[it.id] = url; row.children[sel]._setImg?.(url); }
+}
+
+async function removeCurrent() {
+  const it = items[sel];
+  if (it?.type !== 'custom') return;
+  await window.api.remove(it.id);
+  delete covers[it.id];
+  await load();
+}
+
+const settings = document.getElementById('settings');
+const keyInput = document.getElementById('key');
+async function openSettings() { keyInput.value = await window.api.getKey(); settings.classList.add('open'); keyInput.focus(); }
+function closeSettings() { settings.classList.remove('open'); }
+keyInput.addEventListener('keydown', async e => {
+  if (e.key === 'Enter') { await window.api.setKey(keyInput.value); closeSettings(); }
+});
+
+// Teclado
+window.addEventListener('keydown', e => {
+  if (settings.classList.contains('open')) { if (e.key === 'Escape') closeSettings(); return; }
+  if (e.key === 'ArrowRight') { sel++; update(); }
+  else if (e.key === 'ArrowLeft') { sel--; update(); }
+  else if (e.key === 'Home') { sel = 0; update(); }
+  else if (e.key === 'End') { sel = items.length - 1; update(); }
+  else if (e.key === 'Enter') activate();
+  else if (e.key === 'Escape') window.api.hide();
+  else if (e.key.toLowerCase() === 'c') changeCover();
+  else if (e.key === 'Delete') removeCurrent();
+});
+
+// Mando (A = jugar, B = cerrar, Y = portada, X = quitar, D-pad / stick = mover)
+let prev = {}, lastMove = 0;
+function pad() {
+  if (!document.hidden && !settings.classList.contains('open')) {
+    const gp = [...(navigator.getGamepads() || [])].find(g => g);
+    if (gp) {
+      const now = performance.now();
+      const b = i => gp.buttons[i]?.pressed;
+      const edge = (k, v, fn) => { if (v && !prev[k]) fn(); prev[k] = v; };
+      edge('a', b(0), activate); edge('b', b(1), () => window.api.hide());
+      edge('x', b(2), removeCurrent); edge('y', b(3), changeCover);
+      const left = b(14) || gp.axes[0] < -.6, right = b(15) || gp.axes[0] > .6;
+      if ((left || right) && now - lastMove > 160) { sel += right ? 1 : -1; update(); lastMove = now; }
+    }
+  }
+  requestAnimationFrame(pad);
+}
+requestAnimationFrame(pad);
+
+// Cada vez que se invoca: relanzar la animación y refrescar la lista
+window.api.onEnter(() => {
+  document.body.classList.remove('enter');
+  void document.body.offsetWidth;
+  document.body.classList.add('enter');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>

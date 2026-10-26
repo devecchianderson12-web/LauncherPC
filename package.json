@@ -1,0 +1,27 @@
+{
+  "name": "ps-launcher",
+  "productName": "PS Launcher",
+  "version": "0.1.0",
+  "description": "Launcher de juegos con interfaz estilo PS4",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.local.pslauncher",
+    "productName": "PS Launcher",
+    "files": ["main.js", "preload.js", "index.html", "assets/**"],
+    "win": { "target": "nsis", "icon": "assets/icon.png" },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
