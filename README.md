@@ -3,9 +3,8 @@
 Launcher estilo PS4 para Windows. Detecta juegos de Steam (todas las bibliotecas y discos) y Epic,
 y permite añadir cualquier .exe con portada automática.
 
-## Uso
-- `npm install` y `npm start` para probar.
-- `npm run dist` genera el instalador en `dist/`.
-- Atajo global: Ctrl+Alt+P (abre/cierra). También clic en el icono de la bandeja.
-- Teclado: flechas, Enter, C (portada), Supr (quitar), Esc (cerrar). Mando: A, B, Y, X, cruceta.
-- Portadas de juegos que no son de Steam: Ajustes → clave gratuita de SteamGridDB.
+- `npm install` y `npm start` para probar. `npm run dist` genera el instalador en `dist/`.
+- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, C (portada), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
+- Mando: A jugar, B cerrar, Y portada, X quitar, RB cambia de diseño.
+- Estadísticas arriba a la derecha: CPU/RAM del sistema; GPU NVIDIA con nvidia-smi.
+  Para la temperatura de CPU (y GPU AMD/Intel) abre LibreHardwareMonitor con "Remote Web Server" activado (puerto 8085).

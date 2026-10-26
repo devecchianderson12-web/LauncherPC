@@ -4,214 +4,379 @@
 <meta charset="utf-8">
 <title>PS Launcher</title>
 <style>
-  :root {
-    --bg1: #0b3fa8;
-    --bg2: #061a55;
-    --bg3: #02082a;
-    --tile-w: 220px;
-    --tile-h: 330px;
-    --gap: 44px;
-  }
+  :root { --u: 1px; }
   * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; overflow: hidden; background: var(--bg3); color: #fff;
+  html, body { height: 100%; overflow: hidden; background: #061a55; color: #fff;
     font-family: "Segoe UI Light", "Segoe UI", system-ui, sans-serif; user-select: none; }
 
-  #bg {
-    position: fixed; inset: 0;
+  /* Fondo: solo transform/opacity, para mantener 60 fps */
+  #bg { position: fixed; inset: 0; background: linear-gradient(160deg, #0a3fb0 0%, #0a2a86 45%, #061a55 100%); }
+  #wave { position: fixed; left: -20%; top: -20%; width: 140%; height: 140%;
     background:
-      radial-gradient(ellipse 80% 60% at 30% 20%, var(--bg1), transparent 70%),
-      radial-gradient(ellipse 90% 70% at 80% 90%, #0a2a86, transparent 70%),
-      linear-gradient(160deg, var(--bg2), var(--bg3));
-    animation: drift 18s ease-in-out infinite alternate;
-  }
-  @keyframes drift { to { filter: hue-rotate(-12deg) brightness(1.08); } }
+      radial-gradient(ellipse 60% 40% at 30% 60%, rgba(70,140,255,.32), transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 30%, rgba(20,90,230,.32), transparent 70%);
+    animation: wave 24s ease-in-out infinite alternate; }
+  @keyframes wave { to { transform: translate3d(6%, 4%, 0) scale(1.08); } }
+  #flash { position: fixed; inset: 0; background: #7fb2ff; opacity: 0; pointer-events: none; }
 
-  #top { position: fixed; top: 0; left: 0; right: 0; height: 110px; padding: 36px 64px;
-    display: flex; justify-content: space-between; align-items: center; font-size: 30px; letter-spacing: .5px; }
-  #count { opacity: .75; font-size: 22px; }
-  #clock { font-size: 34px; }
+  /* Barra superior */
+  #top { position: fixed; top: 0; left: 0; right: 0; height: calc(var(--u) * 130); padding: 0 calc(var(--u) * 70);
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+  #hint { font-size: calc(var(--u) * 18); opacity: .6; }
+  #user { display: flex; align-items: center; gap: calc(var(--u) * 16); font-size: calc(var(--u) * 30); }
+  #avatar { width: calc(var(--u) * 56); height: calc(var(--u) * 56); border-radius: 50%; background: #e8f0ff; color: #0a2a86;
+    display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 28); font-family: "Segoe UI", sans-serif; }
+  #right { display: flex; justify-content: flex-end; align-items: center; gap: calc(var(--u) * 36); }
+  #stats { font-size: calc(var(--u) * 24); white-space: pre; opacity: .92; }
+  #clock { font-size: calc(var(--u) * 38); }
 
-  #stage { position: fixed; left: 0; right: 0; top: 50%; height: var(--tile-h); margin-top: calc(var(--tile-h) / -2 - 30px); }
-  #row { position: absolute; left: 50%; top: 0; display: flex; gap: var(--gap);
-    transition: transform .22s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+  /* Escenario */
+  #stage { position: fixed; inset: 0; }
+  .tile { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; background: #12409f;
+    transition: transform .2s cubic-bezier(.2,.8,.2,1); contain: layout paint; }
+  .tile .art { position: absolute; inset: 0; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; }
+  .ph { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 22px; font-size: 34px; line-height: 1.1;
+    background: linear-gradient(160deg, #1f5fd6, #0b2f86); }
+  .tile.special .art { display: flex; align-items: center; justify-content: center; font-size: 150px; font-weight: 100;
+    background: linear-gradient(160deg, #2b6be0, #123e9c); font-family: "Segoe UI Symbol", "Segoe UI", sans-serif; }
 
-  .tile { width: var(--tile-w); height: var(--tile-h); flex: none; position: relative; overflow: hidden;
-    background: linear-gradient(160deg, #1a4fc0, #0a2a7a); box-shadow: 0 6px 24px rgba(0,0,0,.35);
-    transition: transform .18s ease-out, box-shadow .18s ease-out; }
-  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; position: absolute; inset: 0; }
-  .tile .ph { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 18px;
-    font-size: 24px; line-height: 1.15; opacity: .9; }
-  .tile.sel { transform: scale(1.22); z-index: 2; box-shadow: 0 0 0 4px #fff, 0 18px 50px rgba(0,0,0,.55); }
-  .tile.special { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.08);
-    border: 2px dashed rgba(255,255,255,.45); box-shadow: none; }
-  .tile.special.sel { box-shadow: 0 0 0 4px #fff, 0 18px 50px rgba(0,0,0,.55); background: rgba(255,255,255,.16); }
-  .tile.special .plus { font-size: 96px; font-weight: 100; line-height: 1; }
-  .tile.special .lbl { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 22px; opacity: .9; }
+  #frame { position: absolute; border: calc(var(--u) * 3) solid rgba(255,255,255,.92); pointer-events: none; z-index: 5; }
+  #strip { position: absolute; background: #1747b0; z-index: 4; display: none; align-items: center; justify-content: center; }
+  #strip svg { width: calc(var(--u) * 34); height: calc(var(--u) * 34); }
+  #title { position: absolute; font-size: calc(var(--u) * 46); font-weight: 300; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; z-index: 6; }
 
-  #title { position: fixed; left: 0; right: 0; top: calc(50% + var(--tile-h) / 2 + 60px); text-align: center;
-    font-size: 44px; font-weight: 200; text-shadow: 0 2px 12px rgba(0,0,0,.5); }
-  #hint { position: fixed; bottom: 34px; left: 0; right: 0; text-align: center; font-size: 19px; opacity: .65; }
+  /* Panel inferior y recientes (solo diseño PS4) */
+  #info { position: fixed; left: calc(var(--u) * 193); top: calc(var(--u) * 705); width: calc(var(--u) * 1040); bottom: 0;
+    background: #1b55c6; padding: calc(var(--u) * 28); display: flex; gap: calc(var(--u) * 28); align-items: flex-start; }
+  #i-cover { width: calc(var(--u) * 150); height: calc(var(--u) * 150); object-fit: cover; flex: none; display: none; }
+  #i-txt { min-width: 0; }
+  #i-name { font-size: calc(var(--u) * 36); font-weight: 600; font-family: "Segoe UI Semibold", "Segoe UI", sans-serif; }
+  #i-sub { font-size: calc(var(--u) * 24); margin-top: calc(var(--u) * 6); }
+  #i-last { font-size: calc(var(--u) * 22); opacity: .85; margin-top: calc(var(--u) * 14); }
+  #i-path { font-size: calc(var(--u) * 18); opacity: .6; margin-top: calc(var(--u) * 10); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: calc(var(--u) * 800); }
+  #recent { position: fixed; left: calc(var(--u) * 1332); top: calc(var(--u) * 696); width: calc(var(--u) * 520); }
+  #recent h2 { font-size: calc(var(--u) * 32); font-weight: 300; }
+  .rc { display: flex; align-items: center; gap: calc(var(--u) * 20); margin-top: calc(var(--u) * 18); cursor: pointer; }
+  .rc img, .rc .rph { width: calc(var(--u) * 96); height: calc(var(--u) * 96); object-fit: cover; flex: none; background: #12409f; }
+  .rc span { font-size: calc(var(--u) * 24); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.center #info, body.center #recent { display: none; }
+  body.ps4 #hint { opacity: .5; }
 
-  /* Animación de entrada: un solo movimiento, ~0.45 s */
-  body.enter #bg { animation: bgIn .45s ease-out, drift 18s ease-in-out .45s infinite alternate; }
-  body.enter #top { animation: fadeIn .35s ease-out both; }
-  body.enter #stage { animation: stageIn .45s cubic-bezier(.15,.9,.2,1) both; }
-  body.enter #title, body.enter #hint { animation: fadeIn .45s .12s ease-out both; }
-  @keyframes bgIn { from { opacity: 0; filter: brightness(2.2) blur(8px); } }
+  /* Entrada: ~0.4 s, solo transform y opacity */
+  body.enter #stage { animation: stageIn .4s cubic-bezier(.15,.9,.2,1) both; }
+  body.enter #top, body.enter #info, body.enter #recent { animation: fadeIn .35s .08s ease-out both; }
+  body.enter #flash { animation: flash .4s ease-out; }
+  @keyframes stageIn { from { opacity: 0; transform: translate3d(0, 40px, 0); } }
   @keyframes fadeIn { from { opacity: 0; } }
-  @keyframes stageIn { from { opacity: 0; transform: translateY(46px) scale(.94); } }
+  @keyframes flash { from { opacity: .35; } to { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { body.enter * { animation: none !important; } }
 
-  /* Ajustes */
-  #settings { position: fixed; inset: 0; background: rgba(2,8,42,.88); display: none;
-    align-items: center; justify-content: center; flex-direction: column; gap: 18px; z-index: 10; font-size: 22px; }
+  #toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,.95); color: #0a2a86;
+    padding: 12px 26px; font-size: 22px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; }
+  #toast.on { opacity: 1; }
+  #fps { position: fixed; right: 14px; bottom: 10px; font: 16px Consolas, monospace; opacity: .8; display: none; z-index: 20; }
+
+  #settings { position: fixed; inset: 0; background: rgba(2,8,42,.92); display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 20px; z-index: 10; font-size: 22px; }
   #settings.open { display: flex; }
-  #settings input { width: 560px; padding: 12px 16px; font-size: 20px; background: #0a2a7a; color: #fff;
-    border: 2px solid #fff; outline: none; user-select: text; }
+  #settings input { width: 560px; padding: 12px 16px; font-size: 20px; background: #0a2a7a; color: #fff; border: 2px solid #fff; outline: none; user-select: text; }
   #settings p { max-width: 560px; opacity: .75; font-size: 17px; line-height: 1.4; text-align: center; }
+  .btns { display: flex; gap: 14px; }
+  .btn { padding: 10px 28px; border: 2px solid rgba(255,255,255,.6); background: transparent; color: #fff; font: inherit; font-size: 20px; cursor: pointer; }
+  .btn.on { background: #fff; color: #0a2a7a; }
 </style>
 </head>
-<body class="enter">
-<div id="bg"></div>
-<div id="top"><div id="count"></div><div id="clock"></div></div>
-<div id="stage"><div id="row"></div></div>
-<div id="title"></div>
-<div id="hint">Enter: jugar &nbsp;&nbsp; C: cambiar portada &nbsp;&nbsp; Supr: quitar &nbsp;&nbsp; Esc: cerrar</div>
+<body class="ps4 enter">
+<div id="bg"></div><div id="wave"></div>
+
+<div id="top">
+  <div id="hint">Enter jugar &nbsp; C portada &nbsp; L diseño &nbsp; Supr quitar &nbsp; Esc cerrar</div>
+  <div id="user"><div id="avatar"></div><div id="uname"></div></div>
+  <div id="right"><div id="stats">CPU --% --°  |  RAM --  |  GPU --% --°</div><div id="clock"></div></div>
+</div>
+
+<div id="stage">
+  <div id="tiles"></div>
+  <div id="strip"><svg viewBox="0 0 24 24"><path d="M12 4v14M6 12l6 6 6-6" stroke="#fff" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div id="frame"></div>
+  <div id="title"></div>
+</div>
+
+<div id="info">
+  <img id="i-cover" alt="">
+  <div id="i-txt"><div id="i-name"></div><div id="i-sub"></div><div id="i-last"></div><div id="i-path"></div></div>
+</div>
+<div id="recent"><h2>Recientes</h2><div id="rlist"></div></div>
+
+<div id="flash"></div><div id="toast"></div><div id="fps"></div>
 
 <div id="settings">
-  <div>Clave de SteamGridDB (para portadas de juegos que no son de Steam)</div>
+  <div>Diseño</div>
+  <div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button></div>
+  <div style="margin-top:10px">Clave de SteamGridDB (portadas de juegos que no son de Steam)</div>
   <input id="key" placeholder="Pega tu API key y pulsa Enter">
-  <p>Es gratis: crea una cuenta en steamgriddb.com y copia la clave en Preferencias → API. Esc para cerrar.</p>
+  <p>Es gratis: crea una cuenta en steamgriddb.com y copia la clave en Preferencias, API. Esc para cerrar.</p>
 </div>
 
 <script>
+const $ = s => document.querySelector(s);
 const ADD = { id: '_add', type: 'add', name: 'Añadir juego o aplicación' };
 const CFG = { id: '_cfg', type: 'cfg', name: 'Ajustes' };
-let items = [], sel = 0, covers = {};
-const row = document.getElementById('row');
-const TILE = 220 + 44;
 
-function fmtClock() {
-  const d = new Date();
-  document.getElementById('clock').textContent = d.toTimeString().slice(0, 5);
+// Dos diseños, en unidades de 1920x1080
+const L = {
+  ps4:    { bw: 342, bh: 342, ss: 1,    so: 200 / 342, gap: 8,  anchor: 279,  top: 208, valign: 'top',    extra: 66 },
+  center: { bw: 220, bh: 330, ss: 1.22, so: 1,         gap: 34, anchor: null, cy: 470,  valign: 'center', extra: 0 }
+};
+
+let items = [], tiles = [], sel = 0, covers = {}, layout = 'ps4', sig = '', u = 1;
+
+function resize() {
+  u = Math.min(innerWidth / 1920, innerHeight / 1080);
+  document.documentElement.style.setProperty('--u', u + 'px');
+  place();
 }
-setInterval(fmtClock, 10000); fmtClock();
+addEventListener('resize', resize);
 
+// ---------- Posicionado: solo transform (rápido) ----------
+function place() {
+  const c = L[layout];
+  const sw = c.bw * c.ss, sh = c.bh * c.ss, ow = c.bw * c.so;
+  const ax = c.anchor ?? (1920 - sw) / 2;
+  const top = c.valign === 'top' ? c.top : c.cy - sh / 2;
+
+  tiles.forEach((t, i) => {
+    const s = i === sel ? c.ss : c.so, h = c.bh * s;
+    const x = i === sel ? ax : i > sel ? ax + sw + c.gap + (i - sel - 1) * (ow + c.gap) : ax - (sel - i) * (ow + c.gap);
+    const y = c.valign === 'top' ? c.top : c.cy - h / 2;
+    t.style.transform = `translate3d(${x * u}px, ${y * u}px, 0) scale(${s * u})`;
+    t.style.zIndex = i === sel ? 3 : 1;
+    t.style.visibility = Math.abs(i - sel) > 10 ? 'hidden' : 'visible';
+  });
+
+  const f = $('#frame');
+  f.style.left = (ax - 9) * u + 'px'; f.style.top = (top - 9) * u + 'px';
+  f.style.width = (sw + 18) * u + 'px'; f.style.height = (sh + c.extra + 18) * u + 'px';
+
+  const st = $('#strip');
+  st.style.display = c.extra ? 'flex' : 'none';
+  st.style.left = ax * u + 'px'; st.style.top = (top + sh) * u + 'px';
+  st.style.width = sw * u + 'px'; st.style.height = c.extra * u + 'px';
+
+  const ti = $('#title');
+  if (layout === 'ps4') {
+    ti.style.left = (ax + sw + 22) * u + 'px'; ti.style.top = (top + sh - 18) * u + 'px';
+    ti.style.width = (1920 - ax - sw - 60) * u + 'px'; ti.style.textAlign = 'left';
+  } else {
+    ti.style.left = '0px'; ti.style.top = (top + sh + 50) * u + 'px';
+    ti.style.width = '100%'; ti.style.textAlign = 'center';
+  }
+}
+function placeInstant() {
+  tiles.forEach(t => t.style.transition = 'none');
+  place();
+  void document.body.offsetWidth;
+  tiles.forEach(t => t.style.transition = '');
+}
+function sizeTiles() {
+  const c = L[layout];
+  tiles.forEach(t => { t.style.width = c.bw + 'px'; t.style.height = c.bh + 'px'; });
+}
+
+// ---------- Tiles ----------
 function buildTile(it, i) {
   const t = document.createElement('div');
   t.className = 'tile';
-  t.dataset.i = i;
+  const art = document.createElement('div'); art.className = 'art'; t.appendChild(art);
   if (it.type === 'add' || it.type === 'cfg') {
     t.classList.add('special');
-    t.innerHTML = `<div class="plus">${it.type === 'add' ? '+' : '⚙'}</div><div class="lbl">${it.type === 'add' ? 'Añadir' : 'Ajustes'}</div>`;
+    art.textContent = it.type === 'add' ? '+' : '⚙';
   } else {
-    const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = it.name; t.appendChild(ph);
-    const setImg = url => {
-      const old = t.querySelector('img'); if (old) old.remove();
-      const img = new Image(); img.src = url; img.draggable = false;
-      img.onload = () => { ph.style.display = 'none'; t.appendChild(img); };
+    const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = it.name; art.appendChild(ph);
+    t._setImg = url => {
+      const img = new Image(); img.draggable = false;
+      img.onload = () => { art.querySelectorAll('img').forEach(x => x.remove()); art.appendChild(img); ph.style.display = 'none'; if (items[sel] === it) updateInfo(); updateRecent(); };
+      img.src = url;
     };
-    if (covers[it.id]) setImg(covers[it.id]);
-    else window.api.cover(it).then(u => { if (u) { covers[it.id] = u; setImg(u); } });
-    t._setImg = setImg;
+    if (covers[it.id]) t._setImg(covers[it.id]);
+    else window.api.cover(it).then(url => { if (url) { covers[it.id] = url; t._setImg(url); } });
   }
-  t.onclick = () => { sel = i; update(); activate(); };
+  t.addEventListener('click', () => { if (i === sel) activate(); else { sel = i; place(); updateInfo(); } });
   return t;
 }
 
 function render() {
-  row.innerHTML = '';
-  items.forEach((it, i) => row.appendChild(buildTile(it, i)));
-  document.getElementById('count').textContent = (items.length - 2) + ' juegos';
-  update();
+  const box = $('#tiles'); box.innerHTML = ''; tiles = [];
+  items.forEach((it, i) => { const t = buildTile(it, i); box.appendChild(t); tiles.push(t); });
+  sizeTiles(); placeInstant(); updateInfo(); updateRecent();
 }
 
-function update() {
-  sel = Math.max(0, Math.min(items.length - 1, sel));
-  [...row.children].forEach((t, i) => t.classList.toggle('sel', i === sel));
-  row.style.transform = `translateX(${-(sel * TILE + 110)}px)`;
-  document.getElementById('title').textContent = items[sel]?.name || '';
-}
-
-async function load() {
+async function load(force) {
   const games = await window.api.games();
-  items = [...games, ADD, CFG];
-  if (sel >= items.length) sel = 0;
-  render();
+  const next = [...games, ADD, CFG];
+  const s = next.map(g => g.id).join('|');
+  const curId = items[sel]?.id;
+  items = next;
+  if (s !== sig || force) {
+    sig = s;
+    const k = items.findIndex(g => g.id === curId);
+    sel = k >= 0 ? k : 0;
+    render();
+  } else { updateInfo(); }
 }
+
+// ---------- Info y recientes ----------
+function rel(ts) {
+  const m = Math.round((Date.now() - ts) / 60000), f = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  if (m < 60) return f.format(-Math.max(m, 0), 'minute');
+  if (m < 1440) return f.format(-Math.round(m / 60), 'hour');
+  return f.format(-Math.round(m / 1440), 'day');
+}
+function updateInfo() {
+  const it = items[sel]; if (!it) return;
+  $('#title').textContent = it.name;
+  $('#i-name').textContent = it.name;
+  const special = it.type === 'add' || it.type === 'cfg';
+  $('#i-sub').textContent = it.type === 'steam' ? 'Steam' : it.type === 'epic' ? 'Epic Games' : it.type === 'custom' ? 'Añadido por ti'
+    : it.type === 'add' ? 'Elige un .exe y el launcher le busca una portada' : 'Diseño y clave para las portadas';
+  $('#i-last').textContent = special ? '' : it.last ? 'Jugado ' + rel(it.last) : 'Aún sin jugar desde este launcher';
+  $('#i-path').textContent = special ? '' : (it.dir || it.exe || '');
+  const c = $('#i-cover');
+  if (!special && covers[it.id]) { c.src = covers[it.id]; c.style.display = 'block'; } else c.style.display = 'none';
+}
+function updateRecent() {
+  const list = $('#rlist'); list.innerHTML = '';
+  items.filter(g => g.last).slice(0, 3).forEach(g => {
+    const d = document.createElement('div'); d.className = 'rc';
+    if (covers[g.id]) { const im = new Image(); im.src = covers[g.id]; d.appendChild(im); }
+    else { const p = document.createElement('div'); p.className = 'rph'; d.appendChild(p); }
+    const n = document.createElement('span'); n.textContent = g.name; d.appendChild(n);
+    d.onclick = () => window.api.launch(g);
+    list.appendChild(d);
+  });
+  $('#recent').style.visibility = list.children.length ? 'visible' : 'hidden';
+}
+
+// ---------- Acciones ----------
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2200); }
 
 async function activate() {
-  const it = items[sel];
-  if (!it) return;
-  if (it.type === 'add') { if (await window.api.add()) { await load(); sel = items.length - 3; update(); } }
-  else if (it.type === 'cfg') openSettings();
+  const it = items[sel]; if (!it) return;
+  if (it.type === 'add') {
+    const r = await window.api.add();
+    if (r.status === 'added') { await load(true); const k = items.findIndex(g => g.id === r.id); if (k >= 0) { sel = k; place(); updateInfo(); } }
+    else if (r.status === 'dup') {
+      toast('Ya está en la lista');
+      const k = items.findIndex(g => g.name.toLowerCase() === r.name.toLowerCase());
+      if (k >= 0) { sel = k; place(); updateInfo(); }
+    }
+  } else if (it.type === 'cfg') openSettings();
   else window.api.launch(it);
 }
-
 async function changeCover() {
   const it = items[sel];
   if (!it || it.type === 'add' || it.type === 'cfg') return;
   const url = await window.api.setCover(it.id);
-  if (url) { covers[it.id] = url; row.children[sel]._setImg?.(url); }
+  if (url) { covers[it.id] = url; tiles[sel]._setImg(url); }
 }
-
 async function removeCurrent() {
   const it = items[sel];
   if (it?.type !== 'custom') return;
   await window.api.remove(it.id);
   delete covers[it.id];
-  await load();
+  await load(true);
 }
+function setLayout(l, save = true) {
+  layout = l;
+  document.body.classList.remove('ps4', 'center'); document.body.classList.add(l);
+  $('#b-ps4').classList.toggle('on', l === 'ps4'); $('#b-center').classList.toggle('on', l === 'center');
+  sizeTiles(); place();
+  if (save) window.api.setCfg({ layout: l });
+}
+$('#b-ps4').onclick = () => setLayout('ps4');
+$('#b-center').onclick = () => setLayout('center');
 
-const settings = document.getElementById('settings');
-const keyInput = document.getElementById('key');
-async function openSettings() { keyInput.value = await window.api.getKey(); settings.classList.add('open'); keyInput.focus(); }
-function closeSettings() { settings.classList.remove('open'); }
+// ---------- Ajustes ----------
+const settings = $('#settings'), keyInput = $('#key');
+const settingsOpen = () => settings.classList.contains('open');
+async function openSettings() { keyInput.value = (await window.api.getCfg()).apiKey; settings.classList.add('open'); keyInput.focus(); }
 keyInput.addEventListener('keydown', async e => {
-  if (e.key === 'Enter') { await window.api.setKey(keyInput.value); closeSettings(); }
+  if (e.key === 'Enter') { await window.api.setCfg({ apiKey: keyInput.value }); settings.classList.remove('open'); toast('Clave guardada'); }
 });
 
-// Teclado
-window.addEventListener('keydown', e => {
-  if (settings.classList.contains('open')) { if (e.key === 'Escape') closeSettings(); return; }
-  if (e.key === 'ArrowRight') { sel++; update(); }
-  else if (e.key === 'ArrowLeft') { sel--; update(); }
-  else if (e.key === 'Home') { sel = 0; update(); }
-  else if (e.key === 'End') { sel = items.length - 1; update(); }
-  else if (e.key === 'Enter') activate();
-  else if (e.key === 'Escape') window.api.hide();
-  else if (e.key.toLowerCase() === 'c') changeCover();
-  else if (e.key === 'Delete') removeCurrent();
+// ---------- Teclado ----------
+addEventListener('keydown', e => {
+  if (settingsOpen()) { if (e.key === 'Escape') settings.classList.remove('open'); return; }
+  const k = e.key;
+  if (k === 'ArrowRight') { sel = Math.min(items.length - 1, sel + 1); place(); updateInfo(); }
+  else if (k === 'ArrowLeft') { sel = Math.max(0, sel - 1); place(); updateInfo(); }
+  else if (k === 'Home') { sel = 0; place(); updateInfo(); }
+  else if (k === 'End') { sel = items.length - 1; place(); updateInfo(); }
+  else if (k === 'Enter') activate();
+  else if (k === 'Escape') window.api.hide();
+  else if (k === 'Delete') removeCurrent();
+  else if (k.toLowerCase() === 'c') changeCover();
+  else if (k.toLowerCase() === 'l') setLayout(layout === 'ps4' ? 'center' : 'ps4');
+  else if (k.toLowerCase() === 'f') toggleFps();
 });
 
-// Mando (A = jugar, B = cerrar, Y = portada, X = quitar, D-pad / stick = mover)
-let prev = {}, lastMove = 0;
-function pad() {
-  if (!document.hidden && !settings.classList.contains('open')) {
-    const gp = [...(navigator.getGamepads() || [])].find(g => g);
-    if (gp) {
-      const now = performance.now();
-      const b = i => gp.buttons[i]?.pressed;
-      const edge = (k, v, fn) => { if (v && !prev[k]) fn(); prev[k] = v; };
-      edge('a', b(0), activate); edge('b', b(1), () => window.api.hide());
-      edge('x', b(2), removeCurrent); edge('y', b(3), changeCover);
-      const left = b(14) || gp.axes[0] < -.6, right = b(15) || gp.axes[0] > .6;
-      if ((left || right) && now - lastMove > 160) { sel += right ? 1 : -1; update(); lastMove = now; }
-    }
-  }
-  requestAnimationFrame(pad);
+// ---------- Mando (solo mientras está visible) ----------
+let prev = {}, lastMove = 0, pollT = null;
+function poll() {
+  if (settingsOpen()) return;
+  const gp = [...(navigator.getGamepads() || [])].find(g => g); if (!gp) return;
+  const b = i => gp.buttons[i]?.pressed, now = performance.now();
+  const edge = (k, v, fn) => { if (v && !prev[k]) fn(); prev[k] = v; };
+  edge('a', b(0), activate); edge('b', b(1), () => window.api.hide());
+  edge('x', b(2), removeCurrent); edge('y', b(3), changeCover);
+  edge('rb', b(5), () => setLayout(layout === 'ps4' ? 'center' : 'ps4'));
+  const left = b(14) || gp.axes[0] < -.6, right = b(15) || gp.axes[0] > .6;
+  if ((left || right) && now - lastMove > 150) { sel = Math.max(0, Math.min(items.length - 1, sel + (right ? 1 : -1))); place(); updateInfo(); lastMove = now; }
 }
-requestAnimationFrame(pad);
+const startPoll = () => { if (!pollT) pollT = setInterval(poll, 16); };
+const stopPoll = () => { clearInterval(pollT); pollT = null; };
 
-// Cada vez que se invoca: relanzar la animación y refrescar la lista
-window.api.onEnter(() => {
-  document.body.classList.remove('enter');
-  void document.body.offsetWidth;
-  document.body.classList.add('enter');
-  load();
+// ---------- FPS (tecla F) ----------
+let fpsOn = false, frames = 0, t0 = 0;
+function fpsLoop(t) {
+  if (!fpsOn) return;
+  frames++;
+  if (t - t0 >= 1000) { $('#fps').textContent = frames + ' fps'; frames = 0; t0 = t; }
+  requestAnimationFrame(fpsLoop);
+}
+function toggleFps() { fpsOn = !fpsOn; $('#fps').style.display = fpsOn ? 'block' : 'none'; if (fpsOn) { frames = 0; t0 = performance.now(); requestAnimationFrame(fpsLoop); } }
+
+// ---------- Reloj y estadísticas ----------
+const tick = () => { $('#clock').textContent = new Date().toTimeString().slice(0, 5); };
+setInterval(tick, 10000); tick();
+
+window.api.onStats(s => {
+  const p = v => v == null ? '--%' : Math.round(v) + '%';
+  const t = v => v == null ? '--°' : Math.round(v) + '°';
+  const g = n => (n / 1073741824).toFixed(1);
+  $('#stats').textContent =
+    `CPU ${p(s.cpu.use)} ${t(s.cpu.temp)}  |  RAM ${g(s.ram.used)}/${Math.round(g(s.ram.total))} GB  |  GPU ${p(s.gpu.use)} ${t(s.gpu.temp)}`;
 });
 
-load();
+// ---------- Mostrar / ocultar ----------
+window.api.onEnter(async () => {
+  document.body.classList.remove('enter'); void document.body.offsetWidth; document.body.classList.add('enter');
+  startPoll();
+  await load();
+  sel = 0; placeInstant(); updateInfo();   // empieza por el último juego jugado
+});
+window.api.onLeave(stopPoll);
+
+// ---------- Inicio ----------
+(async () => {
+  const c = await window.api.getCfg();
+  $('#uname').textContent = c.user; $('#avatar').textContent = (c.user[0] || '?').toUpperCase();
+  setLayout(c.layout === 'center' ? 'center' : 'ps4', false);
+  resize();
+  await load(true);
+})();
 </script>
 </body>
 </html>
