@@ -209,6 +209,24 @@
   #pk-empty { grid-column: 1 / -1; font-size: calc(var(--u) * 26); opacity: .6; padding: calc(var(--u) * 40) 0; text-align: center; }
   #pk-foot { display: flex; gap: calc(var(--u) * 30); font-size: calc(var(--u) * 21); opacity: .8; flex-wrap: wrap; }
   #pk-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); }
+  /* Portadas en HD: 3 opciones grandes por juego; se elige una o se omite */
+  #hdpick { position: fixed; inset: 0; z-index: 13; background: rgba(2,8,42,.97); display: flex; flex-direction: column; gap: calc(var(--u) * 26);
+    padding: calc(var(--u) * 50) calc(var(--u) * 90) calc(var(--u) * 34); opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
+  #hdpick.open { opacity: 1; visibility: visible; transition: opacity .2s; }
+  #hd-title { font-size: calc(var(--u) * 42); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #hd-sub { font-size: calc(var(--u) * 22); opacity: .65; margin-top: calc(var(--u) * 6); }
+  #hd-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 40); align-items: stretch; }
+  .hd-c { display: flex; flex-direction: column; gap: calc(var(--u) * 12); min-height: 0; cursor: pointer; transition: transform .15s ease-out; }
+  .hd-i { flex: 1; min-height: 0; background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center;
+    outline: calc(var(--u) * 4) solid transparent; outline-offset: calc(var(--u) * 5); transition: outline-color .12s; }
+  .hd-i img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .hd-l { font-size: calc(var(--u) * 22); text-align: center; opacity: .8; }
+  .hd-c.f { transform: scale(1.03); }
+  .hd-c.f .hd-i { outline-color: #fff; }
+  .hd-c.f .hd-l { opacity: 1; }
+  #hd-msg { grid-column: 1 / -1; align-self: center; text-align: center; font-size: calc(var(--u) * 30); opacity: .75; }
+  #hd-foot { display: flex; gap: calc(var(--u) * 30); align-items: center; font-size: calc(var(--u) * 21); opacity: .85; flex-wrap: wrap; }
+  #hd-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); cursor: pointer; }
   #padwiz { position: fixed; inset: 0; background: rgba(2,8,42,.97); display: none; flex-direction: column; align-items: center; justify-content: center;
     gap: 22px; z-index: 20; font-size: 30px; text-align: center; padding: 40px; }
   #padwiz.open { display: flex; }
@@ -244,6 +262,11 @@
   <div id="pk-places"></div>
   <div id="pk-grid"></div>
   <div id="pk-foot"></div>
+</div>
+<div id="hdpick">
+  <div><div id="hd-title"></div><div id="hd-sub"></div></div>
+  <div id="hd-cards"></div>
+  <div id="hd-foot"></div>
 </div>
 <div id="padwiz"><div id="pw-t"></div><small id="pw-s"></small><div class="btns"><button class="btn" id="pw-skip">Omitir</button><button class="btn" id="pw-cancel">Cancelar</button></div></div>
 <div id="upd"><b id="upd-t"></b><span id="upd-s">Se cerrará y se abrirá la versión nueva</span>
@@ -331,8 +354,10 @@ setInterval(() => {
 const Wave = (() => {
   const cv = $('#wave');
   let gl = null, ctx2 = null, uR = null, uT = null, uP = null, uC = null, uK = null, uM = null, purple = 0, raf = 0, on = false, last = 0, ready = false;
-  let xm = 0;                                   // 1 = "Fondo original PS3": hebras finas, se dibuja a más resolución
-  const scale = () => xm ? .6 : .4;
+  let xm = 0;                                   // 1 = "Fondo original PS3": hebras finas, se dibuja a algo más de resolución
+  // Resolución automática: si el fondo no llega a sus 30 fps (GPU integrada, sin GPU…) se dibuja más chico hasta que llegue
+  let dyn = 1, slow = 0;
+  const scale = () => (xm ? .5 : .4) * dyn;
   const t0 = performance.now();
   const FS = `precision highp float;
 uniform vec2 R;
@@ -373,18 +398,29 @@ vec3 xmb(vec2 uv) {
   float x = uv.x, y = uv.y;
   float y0 = 0.39 + 0.085 * sin(3.4 * x - 0.55 + T * 0.045) + 0.02 * sin(7.0 * x + T * 0.09);
   float spread = 0.10 + 0.05 * sin(x * 1.7 + T * 0.035 + 1.0);
-  float px = 1.2 / R.y, a = 0.0, lo = 1.0, hi = 0.0;
-  for (int k = 0; k < 16; k++) {
-    float f = float(k) / 15.0;
-    float yk = y0 + spread * (f - 0.5) * 2.0 * cos(1.7 * x + f * 3.4 + T * (0.05 + 0.012 * f)) + 0.015 * sin(4.0 * x + f * 9.0 + T * 0.07);
-    lo = min(lo, yk); hi = max(hi, yk);
-    float d = (y - yk) / px;
-    a += exp(-d * d) * (0.05 + 0.13 * hash(vec2(f, 3.1)));          // hebras finas, cada una con su brillo
-  }
-  float inside = smoothstep(lo - 0.015, lo + 0.03, y) * (1.0 - smoothstep(hi - 0.03, hi + 0.015, y));
-  a += inside * 0.06 + exp(-(y - y0) * (y - y0) / 0.008) * 0.04;
+  float dy0 = y - y0, px = 1.2 / R.y;
   vec3 wc = mix(lt, vec3(1.0), 0.7);
-  col += wc * a;
+  col += wc * exp(-dy0 * dy0 / 0.008) * 0.04;
+  // Las hebras solo se calculan cerca de la ola (la mayoría de la pantalla se salta el bucle).
+  // Cada hebra k usa cos(A + k*B) y sin(C + k*D): se avanza girando el ángulo, sin llamar a cos/sin 16 veces.
+  if (abs(dy0) < spread + 0.035) {
+    float a = 0.0, lo = 1.0, hi = 0.0;
+    float A = 1.7 * x + T * 0.05, B = (3.4 + T * 0.012) / 15.0;
+    float Cc = 4.0 * x + T * 0.07, Dd = 9.0 / 15.0;
+    vec2 r1 = vec2(cos(A), sin(A)), s1 = vec2(cos(B), sin(B));
+    vec2 r2 = vec2(cos(Cc), sin(Cc)), s2 = vec2(cos(Dd), sin(Dd));
+    for (int k = 0; k < 16; k++) {
+      float f = float(k) / 15.0;
+      float yk = y0 + spread * (f - 0.5) * 2.0 * r1.x + 0.015 * r2.y;
+      lo = min(lo, yk); hi = max(hi, yk);
+      float d = (y - yk) / px;
+      a += exp(-d * d) * (0.05 + 0.13 * fract(f * 7.31 + 0.37));    // hebras finas, cada una con su brillo
+      r1 = vec2(r1.x * s1.x - r1.y * s1.y, r1.y * s1.x + r1.x * s1.y);
+      r2 = vec2(r2.x * s2.x - r2.y * s2.y, r2.y * s2.x + r2.x * s2.y);
+    }
+    a += smoothstep(lo - 0.015, lo + 0.03, y) * (1.0 - smoothstep(hi - 0.03, hi + 0.015, y)) * 0.06;
+    col += wc * a;
+  }
   // Destellos: pocos, sobre todo alrededor de la ola; titilan y se desplazan muy despacio
   vec2 sp = vec2(x * asp - T * 0.004, y) * 90.0;
   vec2 cell = floor(sp), fr = fract(sp);
@@ -433,6 +469,8 @@ void main() {
     const loc = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     uR = gl.getUniformLocation(pr, 'R'); uT = gl.getUniformLocation(pr, 'T'); uP = gl.getUniformLocation(pr, 'P');
     uC = gl.getUniformLocation(pr, 'C'); uK = gl.getUniformLocation(pr, 'K'); uM = gl.getUniformLocation(pr, 'M');
+    // Sin GPU real (WebGL por software: lo dibuja el procesador) se arranca directamente a menos resolución
+    try { const d = gl.getExtension('WEBGL_debug_renderer_info'); if (d && /swiftshader|basic render|llvmpipe|software/i.test(gl.getParameter(d.UNMASKED_RENDERER_WEBGL))) dyn = .6; } catch {}
     return true;
   }
   // Misma fórmula que el shader, para la versión 2D
@@ -468,8 +506,12 @@ void main() {
     if (!on) return;
     raf = requestAnimationFrame(frame);
     if (ts - last < 32) return;                      // 30 fps
-    const dt = last ? Math.min((ts - last) / 1000, .1) : 0;
+    const gap = last ? ts - last : 0;
+    const dt = last ? Math.min(gap / 1000, .1) : 0;
     last = ts;
+    // Más de ~45 ms entre dibujos durante ~2 s seguidos = no da abasto: baja la resolución (hasta la mitad)
+    if (gap > 45 && gap < 1000) { if (++slow > 45 && dyn > .5) { dyn = Math.max(.5, dyn * .8); slow = 0; size(); } }
+    else if (gap) slow = Math.max(0, slow - 1);
     Tint.adv(dt);
     const T = (ts - t0) / 1000;
     if (gl) {
@@ -487,7 +529,13 @@ void main() {
       size(); last = 0; raf = requestAnimationFrame(frame);
     },
     size, theme(v) { purple = v; },
-    style(v) { xm = v ? 1 : 0; size(); if (on) { last = 0; } }
+    style(v) { xm = v ? 1 : 0; size(); if (on) { last = 0; } },
+    // Para la tecla F: qué dibuja el fondo (GPU real o software) y a qué resolución
+    info() {
+      let r = gl ? 'WebGL' : ctx2 ? 'canvas 2D' : 'sin iniciar';
+      try { const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); if (d) r = gl.getParameter(d.UNMASKED_RENDERER_WEBGL).replace(/^ANGLE \(|\)$/g, '').replace(/\s*\(0x[0-9a-f]+\)/i, '').slice(0, 70); } catch {}
+      return `  ·  fondo: ${r} · ${cv.width}x${cv.height}${dyn < 1 ? ' (auto ' + Math.round(dyn * 100) + '%)' : ''}`;
+    }
   };
 })();
 // Fondo con video: se reproduce solo cuando el fondo animado se vería (mismas condiciones que el shader)
@@ -706,7 +754,7 @@ function step(dx, dy) { if (layout === 'ps3') xmbMove(dx, dy); else if (dx) go(s
 const nextLayout = () => ({ ps4: 'center', center: 'ps3', ps3: 'ps4' }[layout] || 'ps4');
 let wheelAt = 0;
 addEventListener('wheel', e => {
-  if (layout !== 'ps3' || settingsOpen() || pickerOpen() || launching || !e.deltaY) return;
+  if (layout !== 'ps3' || settingsOpen() || pickerOpen() || hdOpen() || launching || !e.deltaY) return;
   const now = performance.now(); if (now - wheelAt < 90) return; wheelAt = now;
   xmbMove(0, Math.sign(e.deltaY));
 }, { passive: true });
@@ -830,7 +878,7 @@ function hideArt() {
 function armArt() {
   hideArt();
   const it = items[sel];
-  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen() || pickerOpen()) return;
+  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen() || pickerOpen() || hdOpen()) return;
   artT = setTimeout(() => showArt(it), 1000);
 }
 // preview = true: se dibuja aunque Ajustes esté abierto (para ver el difuminado mientras mueves la barra)
@@ -1016,19 +1064,75 @@ function pkHint() {
   const parts = [[L.ok, 'elegir / abrir'], [L.back, 'carpeta de arriba'], [L.cover, 'cerrar'], [L.scan, 'página arriba'], [L.layout, 'página abajo']];
   $('#pk-foot').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('') + (gp ? '' : '<span class="hk">Clic derecho: atrás</span>');
 }
-// Tecla P / gatillo izquierdo: busca en internet portadas mejores para las que se ven mal (iconos, cabeceras apaisadas, imágenes chicas)
-let upgrading = false;
+// ---------- Portadas en HD (tecla P / gatillo izquierdo) ----------
+// Recorre los juegos cuya portada no llega a 1280x720 y, para cada uno, muestra hasta 3 opciones de internet que sí llegan.
+// Aceptar aplica la marcada · atrás la omite · △/Y o Esc termina. Mientras eliges, ya se buscan las del juego siguiente.
+const hdEl = $('#hdpick'), hdCards = $('#hd-cards');
+const hdOpen = () => hdEl.classList.contains('open');
+let hd = null;
 async function upgradeCovers() {
-  if (upgrading) return;
-  upgrading = true; toast('Buscando portadas mejores…', 120000);
-  try {
-    const r = await window.api.upgradeCovers();
-    if (!r.low) toast('Todas las portadas ya se ven bien');
-    else if (!r.improved) toast(`${r.low} ${r.low === 1 ? 'portada se ve' : 'portadas se ven'} mal, pero no encontré nada mejor` + (r.noKey ? ' (con una clave de SteamGridDB en Ajustes hay más opciones)' : ''), 6000);
-    else toast(`${r.improved} de ${r.low} ${r.low === 1 ? 'portada mejorada' : 'portadas mejoradas'}`);
-  } catch { toast('No se pudieron buscar portadas'); }
-  finally { upgrading = false; }
+  if (hd || pickerOpen()) return;
+  toast('Revisando portadas…', 30000);
+  const low = await window.api.hdScan();
+  if (!low.length) { toast('Todas las portadas ya están en 1280x720 o más'); return; }
+  toast(`${low.length} ${low.length === 1 ? 'portada' : 'portadas'} por debajo de 1280x720`);
+  hd = { list: low, k: -1, opts: [], f: 0, done: 0, seq: 0 };
+  hideArt(); hdEl.classList.add('open'); hdHint();
+  hdNext();
 }
+function hdNext() {
+  if (!hd || hd.busy) return;                                  // aplicando una: se espera a que termine
+  if (++hd.k >= hd.list.length) { hdClose(); return; }
+  const g = hd.list[hd.k], seq = ++hd.seq;
+  $('#hd-title').textContent = g.name;
+  $('#hd-sub').textContent = `${hd.k + 1} de ${hd.list.length} · portada actual: ${g.res}`;
+  hd.opts = []; hd.f = 0;
+  hdCards.innerHTML = '<div id="hd-msg">Buscando portadas de 1280x720 o más…</div>';
+  window.api.hdOptions(g.id).then(opts => {
+    if (!hd || seq !== hd.seq) return;
+    hd.opts = opts.filter(o => o.preview);
+    if (!hd.opts.length) { hdCards.innerHTML = '<div id="hd-msg">No encontré portadas de 1280x720 o más para este juego.<br>Se pasa al siguiente…</div>'; setTimeout(() => { if (hd && seq === hd.seq) hdNext(); }, 1800); return; }
+    hdCards.innerHTML = '';
+    hd.opts.forEach((o, i) => {
+      const c = document.createElement('div'); c.className = 'hd-c';
+      c.innerHTML = `<div class="hd-i"><img alt=""></div><div class="hd-l">${o.w}x${o.h} · ${o.src}</div>`;
+      c.querySelector('img').src = o.preview;
+      c.onclick = () => { hd.f = i; hdChoose(); };
+      c.onmousemove = () => { if (hd && hd.f !== i) { hd.f = i; hdMark(); } };
+      hdCards.appendChild(c);
+    });
+    hdMark();
+  });
+  const nx = hd.list[hd.k + 1]; if (nx) window.api.hdOptions(nx.id);           // se adelanta la búsqueda del siguiente
+}
+function hdMark() { [...hdCards.children].forEach((c, i) => c.classList.toggle('f', i === hd.f)); }
+function hdMove(d) { if (hd && hd.opts.length) { hd.f = Math.max(0, Math.min(hd.opts.length - 1, hd.f + d)); hdMark(); } }
+async function hdChoose() {
+  if (!hd || !hd.opts.length || hd.busy) return;
+  const g = hd.list[hd.k], o = hd.opts[hd.f];
+  hd.busy = true;
+  const url = await window.api.hdApply(g.id, o.i);
+  if (!hd) return;
+  hd.busy = false;
+  const it = items.find(x => x.id === g.id);
+  if (url && it) { setCoverUrl(it, url); hd.done++; } else if (!url) toast('No se pudo aplicar esa portada');
+  hdNext();
+}
+function hdClose() {
+  if (!hd) return;
+  const n = hd.done; hd = null;
+  hdEl.classList.remove('open'); hdCards.innerHTML = '';
+  window.api.hdDone();
+  toast(n ? `${n} ${n === 1 ? 'portada cambiada' : 'portadas cambiadas'} a HD` : 'Sin cambios');
+  armArt();
+}
+function hdHint() {
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Retroceso', cover: 'Esc' };
+  $('#hd-foot').innerHTML = [[L.ok, 'aplicar', 'ok'], [L.back, 'omitir este juego', 'skip'], [L.cover, 'terminar', 'end']]
+    .map(([b, t, a]) => `<span class="hk" data-a="${a}">${glyph(b, k)}${t}</span>`).join('') + '<span class="hk">← → elegir</span>';
+}
+$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'skip') hdNext(); else if (a === 'end') hdClose(); });
+hdEl.addEventListener('contextmenu', e => { e.preventDefault(); hdNext(); });   // clic derecho = omitir
 async function removeCurrent() {
   const it = items[sel];
   if (it?.type !== 'custom') return;
@@ -1331,6 +1435,16 @@ addEventListener('keydown', e => {
   setHint(null);
   if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
+  if (hdOpen()) {
+    if (k === 'ArrowRight' || k === 'ArrowDown') hdMove(1);
+    else if (k === 'ArrowLeft' || k === 'ArrowUp') hdMove(-1);
+    else if (k === 'Enter') hdChoose();
+    else if (k === 'Backspace') hdNext();
+    else if (k === 'Escape') hdClose();
+    else if (k >= '1' && k <= '3') { hdMove(+k - 1 - (hd?.f || 0)); hdChoose(); }
+    e.preventDefault();
+    return;
+  }
   if (pickerOpen()) {
     if (k.startsWith('Arrow')) {
       const now = performance.now();
@@ -1401,7 +1515,7 @@ function glyph(name, kind) {
   const col = PS_CLS[name] ? `ps-${PS_CLS[name]}` : pal === 'xbox' && face ? `xbox-${name}` : '';
   return `<span class="bk ${face ? 'fc' : 'pl'} ${pal === 'ps' || pal === 'xbox' ? col : ''}">${esc}</span>`;
 }
-const HINT_ACTS = [['ok', 'jugar'], ['scan', 'buscar juegos'], ['cover', 'portada'], ['upgrade', 'mejorar portadas'], ['layout', 'diseño'], ['remove', 'quitar'], ['back', 'cerrar']];
+const HINT_ACTS = [['ok', 'jugar'], ['scan', 'buscar juegos'], ['cover', 'portada'], ['upgrade', 'portadas HD'], ['layout', 'diseño'], ['remove', 'quitar'], ['back', 'cerrar']];
 const KB_KEYS = { ok: 'Enter', scan: 'S', cover: 'C', upgrade: 'P', layout: 'L', remove: 'Supr', back: 'Esc' };
 const hintHtml = (names, kind) => HINT_ACTS.map(([a, t]) => `<span class="hk">${glyph(names[a], kind)}${t}</span>`).join('');
 
@@ -1433,6 +1547,7 @@ function setHint(gp) {                                        // gp = null -> te
   hintGp = gp;
   $('#hint').innerHTML = gp ? hintHtml(labelsOf(gp), kindOf(gp)) : hintHtml(KB_KEYS, 'kb');
   if (pickerOpen()) pkHint();
+  if (hdOpen()) hdHint();
 }
 setHint(null);
 const padList = () => [...(navigator.getGamepads() || [])].filter(Boolean);
@@ -1482,6 +1597,11 @@ function poll() {
   const shN = [4, 5, 6, 7].filter(b => gp.buttons[b]?.pressed).length;
   if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
   const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
+  if (hdOpen()) {
+    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdNext); edge('cover', on('cover'), hdClose);
+    repH(on('right') ? 1 : on('left') ? -1 : 0, now, hdMove);
+    return;
+  }
   if (pickerOpen()) {
     edge('ok', on('ok'), pkActivate); edge('back', on('back'), pkBack); edge('cover', on('cover'), closePicker);
     edge('scan', on('scan'), sh(() => pkPage(-1))); edge('layout', on('layout'), sh(() => pkPage(1)));
@@ -1509,7 +1629,7 @@ const stopPoll = () => { clearInterval(pollT); pollT = null; };
 
 // ----- Asistente: asignar los botones de un mando que no es estándar -----
 const WIZ = [['ok', 'Aceptar / jugar'], ['back', 'Atrás / cerrar'], ['remove', 'Quitar juego'], ['cover', 'Cambiar portada'],
-  ['scan', 'Buscar juegos'], ['layout', 'Cambiar diseño'], ['upgrade', 'Mejorar portadas'],['left', 'Mover a la izquierda'], ['right', 'Mover a la derecha']];
+  ['scan', 'Buscar juegos'], ['layout', 'Cambiar diseño'], ['upgrade', 'Portadas en HD'],['left', 'Mover a la izquierda'], ['right', 'Mover a la derecha']];
 let wiz = null;
 function wizRender() {
   $('#pw-t').innerHTML = `Pulsa el botón para<br><b>${WIZ[wiz.step][1]}</b>`;
@@ -1570,7 +1690,7 @@ function fpsLoop(t) {
 let gpuTxt = '';
 function toggleFps() {
   fpsOn = !fpsOn; $('#fps').style.display = fpsOn ? 'block' : 'none';
-  if (fpsOn) { frames = 0; t0 = performance.now(); window.api.gpuInfo().then(t => gpuTxt = t); requestAnimationFrame(fpsLoop); }
+  if (fpsOn) { frames = 0; t0 = performance.now(); window.api.gpuInfo().then(t => gpuTxt = t + Wave.info()); requestAnimationFrame(fpsLoop); }
 }
 
 // ---------- Reloj y estadísticas ----------
@@ -1634,7 +1754,7 @@ window.api.onEnter(async () => {
   if (!moved) { sel = 0; place(true); updateInfo(); }
   armArt(); hintEmpty(); autotune();
 });
-window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
+window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hdClose(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
 
 // ---------- Pausa: otro programa está en primer plano ----------
 // La ventana sigue detrás con su último fotograma, pero sin fondo animado, mando, reloj ni temporizadores: no consume nada.

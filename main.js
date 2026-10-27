@@ -321,53 +321,104 @@ async function fetchCover(item, f) {
   } finally { coverFree(); }
 }
 
-// ---------- Mejorar portadas (tecla P / gatillo izquierdo) ----------
-// Una portada "se ve mal" si falta, es chica o no es vertical (icono del .exe, cabecera apaisada de Steam...).
-// Solo se buscan portadas verticales (600x900) y solo se reemplaza si la nueva es mejor. Las elegidas a mano con C no se tocan.
-const GOOD_COVER = 300;                                   // puntos: ~ancho en px de una portada vertical
-function coverScore(buf) {
-  try {
-    const img = nativeImage.createFromBuffer(buf);
-    if (img.isEmpty()) return 0;
-    const { width: w, height: h } = img.getSize();
-    return h >= w * 1.2 ? Math.min(w, h / 1.5) : Math.min(w, h) / 4;   // apaisada o cuadrada: cuenta muy poco
-  } catch { return 0; }
+// ---------- Portadas en HD (tecla P / gatillo izquierdo) ----------
+// Una portada está "baja" si su lado largo no llega a 1280 o el corto a 720. Para cada una se buscan en internet
+// hasta 3 imágenes que sí lleguen y el usuario elige cuál aplicar (o la omite).
+// El original HD se guarda en covers\hd\ (lo que cuenta para la resolución) y la baldosa usa una copia de hasta 1000x1500.
+const HD_LONG = 1280, HD_SHORT = 720;
+const isHD = s => !!s && Math.max(s.width, s.height) >= HD_LONG && Math.min(s.width, s.height) >= HD_SHORT;
+const hdDir = () => path.join(coversDir(), 'hd');
+const hdFile = id => path.join(hdDir(), safe(id) + '.jpg');
+const imgSize = buf => { try { const i = nativeImage.createFromBuffer(buf); return i.isEmpty() ? null : i.getSize(); } catch { return null; } };
+// Reduce a como mucho W x H (sin agrandar) y lo guarda como JPEG
+function fitJpeg(buf, W, H, q = 90) {
+  const img = nativeImage.createFromBuffer(buf);
+  const { width, height } = img.getSize(), k = Math.min(1, W / width, H / height);
+  return (k < 1 ? img.resize({ width: Math.round(width * k), height: Math.round(height * k), quality: 'best' }) : img).toJPEG(q);
 }
-async function betterCover(item) {
-  const cands = [];
-  if (item.type === 'steam') cands.push(() => download(`https://cdn.cloudflare.steamstatic.com/steam/apps/${item.appid}/library_600x900.jpg`));
-  cands.push(() => steamGridCover(item.name, item.type === 'steam' ? item.appid : null));
-  if (item.type !== 'steam') cands.push(() => steamStoreCover(item.name, ['library_600x900.jpg']));
-  for (const c of cands) {
-    try { const buf = await c(); if (buf && coverScore(buf) >= GOOD_COVER) return buf; } catch {}
-  }
+function coverRes(id) {
+  for (const f of [hdFile(id), coverFile(id)]) { try { const s = imgSize(fs.readFileSync(f)); if (s) return s; } catch {} }
   return null;
 }
-async function upgradeCovers() {
-  const manual = cfg.manualCovers || {};
-  const low = listGames().filter(g => {
-    if (manual[g.id]) return false;
-    try { return coverScore(fs.readFileSync(coverFile(g.id))) < GOOD_COVER; } catch { return true; }   // sin portada también cuenta
-  });
-  let improved = 0;
-  await Promise.all(low.map(async g => {
-    await coverSlot();
+// appid de Steam: el propio si es de Steam; si no, se busca por nombre en la tienda (exacto, o el primero que contenga el nombre)
+async function steamAppFor(g) {
+  if (g.type === 'steam') return g.appid;
+  const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(g.name), { signal: AbortSignal.timeout(6000) })).json();
+  const apps = (r.items || []).filter(x => x.type === 'app'), k = nkey(g.name);
+  return (apps.find(x => nkey(x.name) === k) || apps.find(x => nkey(x.name).includes(k) || k.includes(nkey(x.name))))?.id || null;
+}
+async function hdCandidates(g) {
+  const urls = [];
+  const appid = await steamAppFor(g).catch(() => null);
+  // Las portadas verticales de Steam y SteamGridDB llegan como mucho a 600x900, así que lo que supera 1280x720 es
+  // el arte principal en grande (banner 3840x1240) y las capturas (1920x1080)
+  if (appid) urls.push([`https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/library_hero_2x.jpg`, 'Arte de Steam']);
+  if (cfg.apiKey) {
     try {
-      const buf = await betterCover(g);
-      if (!buf) return;
-      const f = coverFile(g.id);
-      let cur = 0; try { cur = coverScore(fs.readFileSync(f)); } catch {}
-      if (coverScore(buf) <= cur) return;
-      fs.mkdirSync(coversDir(), { recursive: true });
-      fs.writeFileSync(f, shrink(buf));
-      coverFail.delete(g.id);
-      const lg = lib.games.find(x => x.id === g.id);
-      if (lg && lg.cover !== f) { lg.cover = f; saveLib(); }
-      improved++;
-      if (win && !win.isDestroyed()) win.webContents.send('cover', { id: g.id, url: coverUrl(f) });
-    } catch {} finally { coverFree(); }
-  }));
-  return { low: low.length, improved, noKey: !cfg.apiKey };
+      const h = { Authorization: 'Bearer ' + cfg.apiKey }, get = async p => (await (await fetch('https://www.steamgriddb.com/api/v2/' + p, { headers: h, signal: AbortSignal.timeout(8000) })).json())?.data || [];
+      let gid = null;
+      if (appid) { try { gid = (await (await fetch(`https://www.steamgriddb.com/api/v2/games/steam/${appid}`, { headers: h, signal: AbortSignal.timeout(8000) })).json())?.data?.id; } catch {} }
+      if (!gid) gid = (await get('search/autocomplete/' + encodeURIComponent(g.name)))[0]?.id;
+      if (gid) {
+        for (const x of await get(`grids/game/${gid}`)) if (isHD(x)) urls.push([x.url, 'SteamGridDB']);
+        for (const x of (await get(`heroes/game/${gid}`)).slice(0, 4)) if (isHD(x)) urls.push([x.url, 'SteamGridDB (banner)']);
+      }
+    } catch {}
+  }
+  if (appid) {
+    try {
+      const d = await (await fetch(`https://store.steampowered.com/api/appdetails?appids=${appid}&filters=screenshots`, { signal: AbortSignal.timeout(8000) })).json();
+      for (const s of (d?.[appid]?.data?.screenshots || []).slice(0, 3)) urls.push([s.path_full, 'Captura de Steam']);
+    } catch {}
+  }
+  const out = [], seen = new Set();
+  for (const [u, src] of urls) {
+    if (out.length >= 3) break;
+    if (seen.has(u)) continue; seen.add(u);
+    try {
+      const buf = await download(u), s = imgSize(buf);
+      if (isHD(s)) out.push({ buf, w: s.width, h: s.height, src });            // se comprueba la imagen real, no lo que dice la web
+    } catch {}
+  }
+  return out;
+}
+const hdCands = new Map();
+function hdScan() {
+  hdCands.clear();
+  return listGames().map(g => ({ g, s: coverRes(g.id) })).filter(x => !isHD(x.s))
+    .map(({ g, s }) => ({ id: g.id, name: g.name, res: s ? `${s.width}x${s.height}` : 'sin portada' }));
+}
+async function hdOptions(id) {
+  const g = listGames().find(x => x.id === id);
+  if (!g) return [];
+  if (!hdCands.has(id)) hdCands.set(id, hdCandidates(g));                       // la promesa se guarda: pedirla dos veces no busca dos veces
+  const list = await hdCands.get(id);
+  return list.map((c, i) => ({ i, w: c.w, h: c.h, src: c.src, preview: (() => { try { return 'data:image/jpeg;base64,' + fitJpeg(c.buf, 520, 520, 82).toString('base64'); } catch { return null; } })() }));
+}
+// Guarda una portada elegida por el usuario. Si es HD se guarda el original en covers\hd\ y la baldosa usa una copia de hasta 1000x1500;
+// si no, solo la copia reducida de siempre (y se borra una copia HD vieja, que ya no corresponde)
+function saveCover(id, buf) {
+  fs.mkdirSync(coversDir(), { recursive: true });
+  if (isHD(imgSize(buf))) {
+    fs.mkdirSync(hdDir(), { recursive: true });
+    fs.writeFileSync(hdFile(id), fitJpeg(buf, 3840, 3840, 92));
+    fs.writeFileSync(coverFile(id), fitJpeg(buf, 1000, 1500, 88));
+  } else {
+    fs.writeFileSync(coverFile(id), shrink(buf));
+    try { fs.unlinkSync(hdFile(id)); } catch {}
+  }
+}
+async function hdApply(id, i) {
+  const c = (await hdCands.get(id))?.[i];
+  if (!c) return null;
+  try {
+    saveCover(id, c.buf);
+    (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();
+    coverFail.delete(id);
+    const lg = lib.games.find(x => x.id === id);
+    if (lg && lg.cover !== coverFile(id)) { lg.cover = coverFile(id); saveLib(); }
+    return coverUrl(coverFile(id));
+  } catch { return null; }
 }
 
 // ---------- Estadísticas del sistema (solo mientras el launcher está visible) ----------
@@ -834,7 +885,7 @@ ipcMain.handle('folders', () => {
 ipcMain.handle('removeFolder', (e, folder) => {
   const gone = cfg.custom.filter(c => c.folder === folder);
   cfg.custom = cfg.custom.filter(c => c.folder !== folder);
-  for (const c of gone) { delete cfg.recent[c.id]; try { fs.unlinkSync(coverFile(c.id)); } catch {} }
+  for (const c of gone) { delete cfg.recent[c.id]; try { fs.unlinkSync(coverFile(c.id)); } catch {} try { fs.unlinkSync(hdFile(c.id)); } catch {} }
   saveCfg();
   return gone.length;
 });
@@ -874,6 +925,7 @@ ipcMain.handle('remove', (e, id) => {
   delete cfg.recent[id]; if (cfg.manualCovers) delete cfg.manualCovers[id];
   saveCfg();
   try { fs.unlinkSync(coverFile(id)); } catch {}
+  try { fs.unlinkSync(hdFile(id)); } catch {}
 });
 
 ipcMain.handle('setCover', async (e, id) => {
@@ -883,11 +935,14 @@ ipcMain.handle('setCover', async (e, id) => {
   });
   if (r.canceled || !r.filePaths[0]) return null;
   fs.mkdirSync(coversDir(), { recursive: true });
-  fs.writeFileSync(coverFile(id), shrink(fs.readFileSync(r.filePaths[0])));
-  (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano: "mejorar portadas" no la reemplaza
+  saveCover(id, fs.readFileSync(r.filePaths[0]));
+  (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano
   return fileUrl(coverFile(id)) + '?t=' + Date.now();
 });
-ipcMain.handle('upgradeCovers', upgradeCovers);
+ipcMain.handle('hdScan', hdScan);
+ipcMain.handle('hdOptions', (e, id) => hdOptions(id));
+ipcMain.handle('hdApply', (e, id, i) => hdApply(id, i));
+ipcMain.handle('hdDone', () => { hdCands.clear(); });             // libera las imágenes descargadas
 
 // ---------- Explorador de portadas propio (pantalla completa, cuadros grandes, mando) ----------
 const IMG_EXT = /\.(jpe?g|png|webp|gif|bmp)$/i;
@@ -951,8 +1006,8 @@ ipcMain.handle('pickApply', (e, id, file) => {
   if (!IMG_EXT.test(file) || !fs.existsSync(file)) return null;
   try {
     fs.mkdirSync(coversDir(), { recursive: true });
-    fs.writeFileSync(coverFile(id), shrink(fs.readFileSync(file)));
-    (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano: "mejorar portadas" no la reemplaza
+    saveCover(id, fs.readFileSync(file));
+    (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano
     const g = lib.games.find(x => x.id === id);
     if (g && g.cover !== coverFile(id)) { g.cover = coverFile(id); saveLib(); }
     return coverUrl(coverFile(id));

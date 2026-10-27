@@ -4,7 +4,7 @@ Launcher estilo PS4 para Windows. Detecta juegos de Steam (todas las bibliotecas
 y permite añadir cualquier .exe con portada automática.
 
 - `npm install` y `npm start` para probar. `npm run dist` genera **`dist/PS-Launcher.exe`**: un único .exe portable, sin instalador. Cópialo donde quieras y ábrelo.
-- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, **S (buscar juegos nuevos)**, C (portada), P (mejorar portadas), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
+- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, **S (buscar juegos nuevos)**, C (portada), P (portadas en HD), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
 - **Mando (Xbox, PlayStation, Nintendo y cualquier mando estándar)**: se detecta solo y la ayuda de arriba muestra los botones del último
   dispositivo que uses (✕ ○ □ △ / L1 R1 en PlayStation, A B X Y / LB RB en Xbox, A B X Y / L R en Nintendo, donde A es el botón derecho).
   Aceptar jugar, atrás cerrar, cuadrado/X quitar, triángulo/Y portada, L1/LB buscar juegos, R1/RB cambia de diseño; cruceta o stick izquierdo para moverte.
@@ -17,7 +17,7 @@ y permite añadir cualquier .exe con portada automática.
   Con el launcher delante, L1/R1/L2 esperan 180 ms antes de actuar para no disparar sus acciones al hacer la combinación.
 - Estadísticas arriba a la derecha: CPU/RAM del sistema; GPU NVIDIA con nvidia-smi.
   (Uso/temperatura de GPU AMD/Intel: LibreHardwareMonitor con Options > "Remote Web Server" > Run, puerto 8085.)
-- **F** muestra los fps, el modo gráfico y el estado de la GPU (para diagnosticar lentitud).
+- **F** muestra los fps, el modo gráfico, el estado de la GPU y **qué dibuja el fondo** (la GPU real o software) y a qué resolución (para diagnosticar lentitud).
 
 ## Rendimiento (60 fps)
 - Antes se forzaba la GPU dedicada; en portátiles con dos GPU eso puede dejar la interfaz a ~20 fps. Ahora arranca con los valores por defecto
@@ -76,13 +76,15 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
 - **Mouse**: clic elige/abre, rueda para desplazarse, clic derecho = atrás.
 - **Mando**: cruceta/stick, aceptar elige/abre, atrás sube de carpeta (en la raíz cierra), △/Y cierra, L1/R1 pasan de página.
 - Desde la primera fila, arriba pasa a los lugares rápidos. Las miniaturas salen de la caché de Windows y solo se piden las que entran en pantalla (4 a la vez).
-- La portada elegida así cuenta como "elegida a mano": **Mejorar portadas** no la reemplaza.
+- Si la imagen que elegís supera 1280x720, se guarda también en HD y **Portadas en HD** (P) ya no la muestra como baja.
 
 ## Tipo de fondo (Ajustes > Fondo)
 - **Fondo clásico**: las cintas de seda de siempre.
 - **Fondo original PS3**: recreación del fondo del XMB: degradado en diagonal, una ola fina de muchas hebras que se retuercen
   y destellos que titilan. Morado en el diseño PS3 y azul en PS4/Centrado; también sigue el **Color del fondo** (color elegido o arcoíris).
-  Se dibuja a 60 % de resolución (las hebras son finas) y a 30 fps, y se detiene igual que el clásico.
+  Se dibuja a 50 % de resolución y a 30 fps; las hebras solo se calculan cerca de la ola. Se detiene igual que el clásico.
+- **Resolución automática del fondo** (clásico y PS3): si no llega a sus 30 fps durante ~2 s (GPU integrada, sin aceleración…) se dibuja más chico, hasta la mitad.
+  Con WebGL por software arranca directamente al 60 %.
 - **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)
   y se reproduce sin sonido y en bucle. Se pausa con la portada de fondo, esperando un juego, con el launcher oculto o pausado.
   Si cancelás el diálogo se vuelve al último video subido. Si el formato no se puede reproducir, vuelve al fondo clásico.
@@ -94,11 +96,17 @@ La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ �
 - **Colores**: como el mando detectado. Xbox con A verde, B roja, X azul, Y amarilla; PlayStation con los símbolos de color sobre negro;
   Nintendo y genéricos en oscuro; las teclas en claro.
 
-## Mejorar portadas (tecla P / LT · L2 · ZL)
-Revisa todas las portadas y, las que se ven mal (faltan, son chicas, o son apaisadas como la cabecera de Steam o el icono del .exe),
-las busca en internet en formato vertical 600x900: Steam (por appid), SteamGridDB (si hay clave en Ajustes) y la tienda de Steam
-si el nombre coincide exactamente. Solo reemplaza si la nueva es mejor, y nunca toca las portadas que elegiste a mano con **C**.
-
+## Portadas en HD (tecla P / LT · L2 · ZL)
+Revisa todas las portadas y, las que están **por debajo de 1280x720** (lado largo menor a 1280 o corto menor a 720), las va mostrando
+de a una con **hasta 3 opciones de internet que sí superan 1280x720**. Vos elegís cuál aplicar:
+- **Aceptar / Enter / clic**: aplica la marcada · **1, 2, 3**: aplica esa opción directamente.
+- **Atrás / Retroceso / clic derecho**: omite ese juego · **△/Y / Esc**: termina.
+- Mientras elegís, ya se buscan las opciones del juego siguiente. Si un juego no tiene ninguna, se avisa y se pasa solo al siguiente.
+- Fuentes: arte principal de Steam en grande (3840x1240), SteamGridDB (si hay clave en Ajustes) y capturas de Steam (1920x1080).
+  Los juegos que no son de Steam se buscan por nombre en la tienda. Ojo: **las portadas verticales de Steam/SteamGridDB llegan como mucho a 600x900**,
+  así que las opciones HD son arte apaisado o capturas. Se comprueba el tamaño real de cada imagen descargada.
+- El original HD se guarda en `covers\hd\` y la baldosa usa una copia de hasta 1000x1500 (más liviana para la GPU).
+  Si elegís una imagen HD propia con **C**, también se guarda así y ya no aparece como baja.
 ## Ajustes
 - Diseño PS4 / Centrado.
 - **Iniciar con Windows Sí/No**: registra el .exe actual en el inicio de Windows (se vuelve a registrar solo si lo mueves de carpeta).
