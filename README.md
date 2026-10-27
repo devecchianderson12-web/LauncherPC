@@ -44,9 +44,11 @@ Pulsa **S** (o LB en el mando) para buscar juegos nuevos: ahí se escanea Steam/
 
 ## Diseños: PS4, Centrado, PS3 y Steam
 La tecla **L** (o R1/RB en el mando) va rotando entre los cuatro, y también se elige en **Ajustes > Diseño**.
-- **Steam** (como el modo Big Picture): fila de portadas verticales con la elegida **ancha** (en los juegos de Steam, su banner
-  `library_hero`), barra azul abajo, nombre y "Jugado hace…" debajo, y una fila de **Recientes** en tarjetas apaisadas
-  (clic = jugar). Solo cambia la interfaz: el fondo es el que esté elegido. Pasar a o desde Steam hace un fundido.
+- **Steam** (como el modo Big Picture): título "Jugados recientemente", fila con la **primera tarjeta ancha** (el último jugado; en juegos de
+  Steam su banner `library_hero`) y el resto verticales, **siempre igual**. La elegida crece apenas (3,5 %) con un marco claro y su nombre
+  y "Jugado hace…" debajo; la fila se desplaza sola **solo** cuando la elegida se iría de la pantalla (dejando ver la siguiente). El fondo
+  pasa a la portada del juego elegido en 0,25 s. Abajo, fila de **Recientes** en tarjetas apaisadas (clic = jugar). Al entrar, las
+  tarjetas llegan escalonadas desde la derecha y lo de abajo sube; al salir se van a la izquierda.
 - **PS3 (XMB)**: fondo morado con las cintas de seda; categorías en horizontal (**Juegos**, **Recientes**, **Herramientas** con Añadir y Buscar juegos,
   y **Ajustes**) y la lista de la categoría elegida en vertical. **Izquierda/derecha** cambia de categoría y **arriba/abajo** de elemento (también con la
   cruceta, el stick o la rueda del ratón). Recientes se ordena por último jugado y las categorías vacías no se muestran. Cada categoría recuerda en qué fila

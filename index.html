@@ -92,22 +92,27 @@
   #steam { position: absolute; inset: 0; display: none; }
   body.steam #steam { display: block; }
   body.steam #tiles, body.steam #strip, body.steam #frame, body.steam #title, body.steam #recent { display: none; }
-  .sc { position: absolute; left: 0; top: 0; height: calc(var(--u) * 370); border-radius: calc(var(--u) * 6); overflow: hidden; cursor: pointer;
-    background: linear-gradient(160deg, #2a475e, #1b2838); will-change: transform; transform-origin: 0 0;
-    transition: transform .28s cubic-bezier(.22,.8,.24,1), width .28s cubic-bezier(.22,.8,.24,1), box-shadow .2s; }
-  #st-row.inst .sc { transition: none; }
+  /* Como el Steam real: la fila no cambia de forma (la primera es ancha, el resto vertical); la elegida crece apenas con un marco
+     claro, y la fila entera se desplaza solo cuando la elegida se iría de la pantalla (un solo transform en #st-row) */
+  #st-row { position: absolute; left: 0; top: 0; will-change: transform; transition: transform .38s cubic-bezier(.22,.8,.24,1); }
+  #st-row.inst, #st-row.inst .sc, #st-info.inst { transition: none; }
+  #st-head { position: absolute; left: calc(var(--u) * 52); top: calc(var(--u) * 94); font: 600 calc(var(--u) * 26) "Segoe UI", sans-serif; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+  .sc { position: absolute; left: 0; top: 0; height: calc(var(--u) * 360); border-radius: calc(var(--u) * 4); overflow: hidden; cursor: pointer;
+    background: linear-gradient(160deg, #2a475e, #1b2838); will-change: transform; transform-origin: 50% 50%;
+    transition: transform .2s cubic-bezier(.22,.8,.24,1), box-shadow .2s; }
   .sc img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; pointer-events: none; }
   .sc .hero { opacity: 0; transition: opacity .3s; }
-  .sc.sel .hero.ok { opacity: 1; }
+  .sc .hero.ok { opacity: 1; }
   .sc .scn { position: absolute; left: calc(var(--u) * 16); right: calc(var(--u) * 16); bottom: calc(var(--u) * 14); font-size: calc(var(--u) * 24);
     line-height: 1.15; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
   .sc.has .scn { display: none; }
   .sc.sp { display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 110); font-weight: 200; font-family: "Segoe UI Symbol", "Segoe UI", sans-serif; }
-  .sc.sel { box-shadow: 0 0 0 calc(var(--u) * 3) rgba(255,255,255,.85), 0 calc(var(--u) * 12) calc(var(--u) * 40) rgba(0,0,0,.55); }
-  .sc .bar { position: absolute; left: calc(var(--u) * 6); right: calc(var(--u) * 6); bottom: calc(var(--u) * 6); height: calc(var(--u) * 4); border-radius: 2px;
-    background: #1a9fff; opacity: 0; transition: opacity .25s; }
-  .sc.sel .bar { opacity: 1; }
-  #st-info { position: absolute; left: calc(var(--u) * 45); top: calc(var(--u) * 524); }
+  .sc.sel { box-shadow: 0 0 0 calc(var(--u) * 3) rgba(220,225,235,.8), 0 calc(var(--u) * 14) calc(var(--u) * 40) rgba(0,0,0,.55); z-index: 2; }
+  .sc .pad { position: absolute; right: calc(var(--u) * 10); bottom: calc(var(--u) * 10); width: calc(var(--u) * 50); height: calc(var(--u) * 36); border-radius: calc(var(--u) * 8);
+    background: rgba(20,22,28,.75); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .2s; }
+  .sc .pad svg { width: 62%; height: 62%; }
+  .sc.sel .pad { opacity: 1; }
+  #st-info { position: absolute; left: 0; top: 0; will-change: transform; transition: transform .2s cubic-bezier(.22,.8,.24,1); }
   #st-name { font: 600 calc(var(--u) * 30) "Segoe UI", sans-serif; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
   #st-sub { font: 600 calc(var(--u) * 17) "Segoe UI", sans-serif; letter-spacing: .06em; opacity: .65; margin-top: calc(var(--u) * 6); text-transform: uppercase; }
   #st-tabs { position: absolute; left: 0; right: 0; top: calc(var(--u) * 630); display: flex; justify-content: center; gap: calc(var(--u) * 30); font: 600 calc(var(--u) * 18) "Segoe UI", sans-serif; letter-spacing: .05em; }
@@ -291,7 +296,7 @@
   <div id="frame"></div>
   <div id="title"></div>
   <div id="xmb"><div id="xcats"></div><div id="xlist"></div></div>
-  <div id="steam"><div id="st-row"></div><div id="st-info"><div id="st-name"></div><div id="st-sub"></div></div>
+  <div id="steam"><div id="st-head">Jugados recientemente</div><div id="st-row"></div><div id="st-info"><div id="st-name"></div><div id="st-sub"></div></div>
     <div id="st-tabs"><span class="on">RECIENTES</span></div><div id="st-rec"></div></div>
 </div>
 
@@ -946,8 +951,14 @@ async function load(force) {
 // ---------- Diseño Steam (como el modo Big Picture) ----------
 // Fila propia (#st-row): la elegida es ancha y las demás verticales. Las tarjetas son absolutas y se mueven con transform;
 // solo cambia el ancho de la que entra y la que sale. Los juegos de Steam muestran su banner ancho (library_hero) al elegirlos.
-const ST = { top: 135, h: 370, ww: 805, pw: 247, gap: 12, ax: 45 };   // unidades de 1920x1080
-let stEls = [];
+// Como el Steam real (Big Picture): la primera tarjeta es ancha (el último jugado) y las demás verticales, siempre igual.
+// La elegida crece apenas (3,5 %) con un marco claro y su nombre debajo; la fila se desplaza solo cuando la elegida se iría
+// de la pantalla, dejando a la vista parte de la tarjeta siguiente. Todo con transform: un transform para la fila, uno por tarjeta.
+const ST = { top: 140, h: 360, ww: 770, pw: 240, gap: 16, ax: 52, peek: 150 };   // unidades de 1920x1080
+const PAD_ICON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.6 2.6 0 0 1-4.4 1.3L14.6 15.5H9.4L7.7 17.6a2.6 2.6 0 0 1-4.4-1.3l-.7-3.4A4.5 4.5 0 0 1 7 7.5z"/></svg>';
+let stEls = [], stOff = 0;
+const stX = i => i === 0 ? 0 : ST.ww + ST.gap + (i - 1) * (ST.pw + ST.gap);   // posición dentro de la fila
+const stW = i => i === 0 ? ST.ww : ST.pw;
 const heroUrl = it => it.type === 'steam' && it.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${it.appid}/library_hero.jpg` : null;
 const ago = t => {
   const m = (Date.now() - t) / 60000;
@@ -961,19 +972,19 @@ function stCover(c, it) {
   const im = new Image(); im.className = 'cv'; im.draggable = false; im.decoding = 'async'; im.src = covers[it.id];
   c.insertBefore(im, c.firstChild); c.classList.add('has');
 }
-function stHero(c) {                                           // el banner ancho se pide recién la primera vez que se elige
-  if (c._hero !== undefined) return;
-  const url = heroUrl(c._it); c._hero = url;
-  if (!url) return;
+function stHero(c) {                                           // la tarjeta ancha (la primera) muestra el banner del juego si es de Steam
+  const url = heroUrl(c._it); if (!url) return;
   const im = new Image(); im.className = 'hero'; im.draggable = false; im.decoding = 'async';
   im.onload = () => im.classList.add('ok');
-  im.src = url; c.insertBefore(im, c.querySelector('.bar'));
+  im.src = url; c.insertBefore(im, c.querySelector('.pad'));
 }
 function stCard(it, i) {
   const c = document.createElement('div'); c.className = 'sc'; c._it = it;
+  c.style.width = stW(i) * u + 'px';
   if (it.type === 'add' || it.type === 'cfg') { c.classList.add('sp'); c.textContent = it.type === 'add' ? '+' : '⚙'; }
   else { const n = document.createElement('div'); n.className = 'scn'; n.textContent = it.name; c.appendChild(n); stCover(c, it); }
-  const bar = document.createElement('div'); bar.className = 'bar'; c.appendChild(bar);
+  const pad = document.createElement('div'); pad.className = 'pad'; pad.innerHTML = PAD_ICON; c.appendChild(pad);
+  if (i === 0 && !c.classList.contains('sp')) stHero(c);
   c.onclick = () => { if (i === sel) activate(); else go(i); };
   return c;
 }
@@ -982,24 +993,30 @@ function stBuild() {
   const frag = document.createDocumentFragment();
   items.forEach((it, i) => { const c = stCard(it, i); frag.appendChild(c); stEls.push(c); });
   row.appendChild(frag);
-  stRecent(); stPlace(true);
+  stOff = 0; stRecent(); stPlace(true);
 }
 function stCovers(id) { stEls.forEach(c => { if (c._it.id === id && !c.classList.contains('sp')) stCover(c, c._it); }); if (layout === 'steam') stRecent(); }
 function stPlace(instant) {
-  const row = $('#st-row'); if (instant) row.classList.add('inst');
+  const row = $('#st-row'), info = $('#st-info');
+  if (instant) { row.classList.add('inst'); info.classList.add('inst'); }
+  // la fila se mueve solo si la elegida se iría de la pantalla (dejando ver un pedazo de la siguiente o la anterior)
+  const view = 1920 - 2 * ST.ax, x = stX(sel), w = stW(sel), last = stEls.length - 1;
+  const minOff = x + w + (sel < last ? ST.peek : 0) - view, maxOff = x - (sel > 0 ? ST.peek : 0);
+  stOff = Math.max(0, Math.min(Math.max(stOff, minOff), maxOff));
+  row.style.transform = `translate3d(${((ST.ax - stOff) * u).toFixed(1)}px, ${(ST.top * u).toFixed(1)}px, 0)`;
   for (let i = 0; i < stEls.length; i++) {
-    const c = stEls[i], d = i - sel;
-    const x = d === 0 ? ST.ax : d > 0 ? ST.ax + ST.ww + ST.gap + (d - 1) * (ST.pw + ST.gap) : ST.ax + d * (ST.pw + ST.gap);
-    if (x < -ST.ww || x > 1920 + ST.pw) { if (c._on !== false) { c._on = false; c.style.display = 'none'; } continue; }   // fuera de pantalla
+    const c = stEls[i], cx = stX(i);
+    if (cx + stW(i) < stOff - 400 || cx > stOff + view + 400) { if (c._on !== false) { c._on = false; c.style.display = 'none'; } continue; }   // fuera de pantalla
     if (c._on !== true) { c._on = true; c.style.display = ''; }
-    c.style.width = (d === 0 ? ST.ww : ST.pw) * u + 'px';
-    c.style.transform = `translate3d(${(x * u).toFixed(1)}px, ${(ST.top * u).toFixed(1)}px, 0)`;
-    c.classList.toggle('sel', d === 0);
-    if (d === 0) stHero(c);
+    const wp = stW(i) * u + 'px'; if (c.style.width !== wp) c.style.width = wp;          // por si cambió el tamaño de la ventana
+    c.style.transform = `translate3d(${(cx * u).toFixed(1)}px, 0, 0)${i === sel ? ' scale(1.035)' : ''}`;
+    c.classList.toggle('sel', i === sel);
   }
-  if (instant) { void row.offsetWidth; row.classList.remove('inst'); }
+  // nombre y última vez jugado, justo debajo de la elegida
+  info.style.transform = `translate3d(${((ST.ax + x - stOff) * u).toFixed(1)}px, ${((ST.top + ST.h + 26) * u).toFixed(1)}px, 0)`;
   const it = items[sel];
-  if (it) { $('#st-name').textContent = it.name; $('#st-sub').textContent = it.last ? 'Jugado ' + ago(it.last) : (SUB[it.type] || ''); }
+  if (it) { $('#st-name').textContent = it.name; $('#st-sub').textContent = it.last ? '▶  Jugado ' + ago(it.last) : (SUB[it.type] || ''); }
+  if (instant) { void row.offsetWidth; row.classList.remove('inst'); info.classList.remove('inst'); }
 }
 // Fila de abajo: los últimos juegos jugados en tarjetas apaisadas (banner si es de Steam, si no la portada)
 function stRecent() {
@@ -1080,7 +1097,7 @@ function armArt() {
   hideArt();
   const it = items[sel];
   if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen() || pickerOpen() || hdOpen()) return;
-  artT = setTimeout(() => showArt(it), 1000);
+  artT = setTimeout(() => showArt(it), layout === 'steam' ? 250 : 1000);   // en Steam el fondo cambia casi enseguida, como el original
 }
 // preview = true: se dibuja aunque Ajustes esté abierto (para ver el difuminado mientras mueves la barra)
 function showArt(it, preview = false) {
@@ -1386,16 +1403,38 @@ let layoutSeq = 0, layoutPending = null, layoutOuts = [];
 // Hacia o desde el diseño Steam: el actual se desvanece y el nuevo entra subiendo apenas
 async function morphFade(l) {
   const seq = ++layoutSeq; layoutPending = l;
-  const sel_ = d => (d === 'steam' ? ['#steam'] : d === 'ps3' ? ['#xmb'] : ['#tiles', '#strip', '#frame', '#title', '#recent']).map($);
-  const outs = sel_(layout).map(e => e.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-in', fill: 'forwards' }));
+  // 1) sale el diseño actual: en Steam las tarjetas se van a la izquierda una tras otra; en los demás, todo junto
+  let outs;
+  if (layout === 'steam') {
+    const vis = stEls.filter(c => c._on);
+    outs = vis.map((c, i) => c.animate([{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: '-70px 0' }], { duration: 200, delay: Math.min(i, 8) * 18, easing: 'ease-in', fill: 'forwards' }))
+      .concat(['#st-info', '#st-tabs', '#st-rec'].map($).map(e => e.animate([{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: '0 24px' }], { duration: 200, easing: 'ease-in', fill: 'forwards' })));
+  } else {
+    const els = (layout === 'ps3' ? ['#xmb'] : ['#tiles', '#strip', '#frame', '#title', '#recent']).map($);
+    outs = els.map(e => e.animate([{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: '-50px 0' }], { duration: 200, easing: 'ease-in', fill: 'forwards' }));
+  }
   layoutOuts = outs;
   try { await Promise.all(outs.map(a => a.finished)); } catch {}
   outs.forEach(a => a.cancel());
   if (seq !== layoutSeq) return;
   layoutPending = null;
+  // 2) entra el nuevo, escalonado como los demás diseños
   applyLayout(l);
-  sel_(l).forEach(e => e.animate([{ opacity: 0, translate: '0 20px' }, { opacity: 1, translate: '0 0' }], { duration: 320, easing: XEASE, fill: 'backwards' }));
-  if (l === 'ps3') xmbEnter(1);
+  if (l === 'steam') stEnter();
+  else if (l === 'ps3') { xcEls.forEach((el, i) => el.animate([{ opacity: 0, translate: '90px 0' }, { opacity: 1, translate: '0 0' }], { duration: 420, delay: i * 55, easing: XEASE, fill: 'backwards' })); xmbEnter(1); }
+  else {
+    tiles.forEach((t, i) => { if (t.style.display !== 'none') t.animate([{ opacity: 0, translate: '90px 0' }, { opacity: 1, translate: '0 0' }], { duration: 420, delay: Math.min(Math.abs(i - sel), VIS) * 32, easing: XEASE, fill: 'backwards' }); });
+    ['#frame', '#strip', '#title'].forEach(q => { const e = $(q); if (e.style.display !== 'none') e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 150, easing: 'ease-out', fill: 'backwards' }); });
+    if (l === 'ps4') $('#recent').animate([{ opacity: 0, translate: '40px 0' }, { opacity: 1, translate: '0 0' }], { duration: 400, delay: 220, easing: XEASE, fill: 'backwards' });
+  }
+}
+// Entrada del diseño Steam: las tarjetas llegan desde la derecha una tras otra (la elegida primero), el nombre sube
+// y la fila de recientes aparece desde abajo, tarjeta por tarjeta. Solo transform/opacity.
+function stEnter() {
+  stEls.forEach((c, i) => { if (c._on) c.animate([{ opacity: 0, translate: '120px 0' }, { opacity: 1, translate: '0 0' }], { duration: 460, delay: Math.max(0, i - sel) * 45, easing: XEASE, fill: 'backwards' }); });
+  $('#st-info').animate([{ opacity: 0, translate: '0 16px' }, { opacity: 1, translate: '0 0' }], { duration: 380, delay: 140, easing: XEASE, fill: 'backwards' });
+  $('#st-tabs').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 220, easing: 'ease-out', fill: 'backwards' });
+  [...$('#st-rec').children].forEach((r, i) => r.animate([{ opacity: 0, translate: '0 40px' }, { opacity: 1, translate: '0 0' }], { duration: 420, delay: 260 + i * 60, easing: XEASE, fill: 'backwards' }));
 }
 async function morphViaXmb(l) {
   const seq = ++layoutSeq; layoutPending = l;
