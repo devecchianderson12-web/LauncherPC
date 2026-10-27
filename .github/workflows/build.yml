@@ -20,7 +20,9 @@ jobs:
         shell: bash
         env:
           SGDB_KEY: ${{ secrets.SGDB_KEY }}
-        run: node -e "require('fs').writeFileSync('build-key.json', JSON.stringify({ sgdb: process.env.SGDB_KEY || '' }))"
+        run: |
+          node -e "require('fs').writeFileSync('build-key.json', JSON.stringify({ sgdb: process.env.SGDB_KEY || '' }))"
+          node -e "console.log('clave incluida:', require('./build-key.json').sgdb ? 'sí' : 'no')"
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
