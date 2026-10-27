@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
   hdOptions: id => ipcRenderer.invoke('hdOptions', id),
   hdApply: (id, i) => ipcRenderer.invoke('hdApply', id, i),
   hdDone: () => ipcRenderer.invoke('hdDone'),
+  googleCover: id => ipcRenderer.invoke('googleCover', id),
+  onNote: cb => ipcRenderer.on('note', (e, m) => cb(m)),
   pickPlaces: id => ipcRenderer.invoke('pickPlaces', id),
   pickList: dir => ipcRenderer.invoke('pickList', dir),
   pickThumb: f => ipcRenderer.invoke('pickThumb', f),

@@ -75,8 +75,7 @@ la optimización de gráficos y también si el launcher se cierra a la fuerza (e
 
 ## Fondo con la portada
 Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece difuminada de fondo (con fundido suave);
-al moverte, vuelve el fondo de cintas. **Ajustes > Difuminado de la portada** regula cuánto se difumina (0 = nítida); mientras movés la barra
-se ve la portada del juego elegido para comparar.
+al moverte, vuelve el fondo de cintas. (Su difuminado es fijo; el ajuste de difuminado ahora es del fondo animado, ver abajo.)
 
 ## Cambiar portada: explorador propio (C / △ / Y)
 En vez del diálogo chico de Windows se abre un explorador **a pantalla completa con cuadros grandes** (miniatura de cada imagen), pensado para verse de lejos.
@@ -90,7 +89,12 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
 
 ## Tipo de fondo (Ajustes > Fondo)
 - **Fondo clásico**: las cintas de seda de siempre.
-- **Fondo original PS3**: el **video original de la ola del XMB** (`assets/xmb-wave.mp4`, 1080p, 16 s en bucle, sin sonido), que viene
+- **Fondo original PS3**, con **Ajustes > Fondo PS3**:
+  - **Alta definición** (por defecto): la ola del XMB **dibujada en la GPU** a la resolución de la pantalla, calcada del video
+    (fondo azul más oscuro y violáceo arriba, cinta translúcida con el borde de arriba como línea fina y brillante, pliegues, bokeh
+    a la izquierda y polvo fino). Nítida en 1080p o más; sigue el color elegido y el arcoíris.
+  - **Video original**: el video de abajo.
+- El **video original de la ola del XMB** (`assets/xmb-wave.mp4`, 1080p, 16 s en bucle, sin sonido) viene
   dentro del .exe (fuera del .asar, ver `asarUnpack` en `package.json`). El video es un 720p estirado y muy comprimido (~1 Mbit/s),
   así que el shader lo **mejora** en la GPU: realza los bordes donde hay detalle (la ola, los pliegues, los destellos) y suaviza los
   bloques del fondo liso. Cada cuadro se sube a una textura y el shader lo **tiñe**:
@@ -98,6 +102,8 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
   fondo toma el color y la ola sigue blanca. El video solo se reproduce mientras ese fondo se ve. Si no se puede leer, se usa la ola
   dibujada por el shader (láminas translúcidas, como antes).
   ⚠️ El video es material de Sony: queda incluido en el repositorio y en cada release (decisión del dueño del proyecto).
+- **Ajustes > Difuminado del fondo** (0–100 %, por defecto 0): difumina todo el fondo animado (cintas, ola PS3, video) con un filtro
+  de la GPU; el fondo se agranda apenas para que los bordes no queden oscuros.
 - **Ajustes > Nitidez del fondo** (25–100 %, por defecto **100 %** = resolución de la pantalla): a qué resolución se dibuja el fondo
   animado (clásico y PS3). Si con 100 % se traba, se baja con − / + (de a 10). La tecla F muestra la resolución y la nitidez.
 - **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)
@@ -110,6 +116,14 @@ La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ �
 - **Minimalista**: contorno blanco.
 - **Colores**: como el mando detectado. Xbox con A verde, B roja, X azul, Y amarilla; PlayStation con los símbolos de color sobre negro;
   Nintendo y genéricos en oscuro; las teclas en claro.
+
+## Buscar portada en Google (G en la ventana de P, X/□ en el mando, o "Buscar en Google…" en el explorador de C)
+Abre **Google Imágenes dentro del launcher** con la búsqueda hecha (`<nombre del juego> wallpaper`, imágenes grandes y horizontales).
+Hacé clic en una imagen para verla grande y después **clic derecho → "Usar esta imagen como portada"**: se descarga, se guarda
+(en HD si supera 1280x720) y la ventana se cierra. Esc cierra. Se maneja con el mouse.
+- No se lee ni se modifica la página de Google: solo se usa la dirección de la imagen del clic derecho. Sesión aparte (`persist:google`),
+  solo deja navegar por Google y bloquea ventanas nuevas.
+- Si Google pide verificar que no sos un robot, se resuelve a mano en esa ventana (queda guardado en esa sesión).
 
 ## Portada en HD (tecla P / LT · L2 · ZL)
 Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 9 imágenes

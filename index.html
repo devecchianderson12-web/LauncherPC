@@ -284,13 +284,14 @@
   <div class="row"><span id="gfxinfo">Gráficos</span><button class="btn" id="b-tune">Optimizar</button></div>
   <div class="row"><span>Diseño</span><div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button><button class="btn" id="b-ps3">PS3</button></div></div>
   <div class="row"><span>Fondo</span><div class="btns"><button class="btn" id="b-bgvid">Subir video</button><button class="btn" id="b-bgcls">Fondo clásico</button><button class="btn" id="b-bgps3">Fondo original PS3</button></div></div>
+  <div class="row"><span>Fondo PS3</span><div class="btns"><button class="btn" id="b-psh">Alta definición</button><button class="btn" id="b-psv">Video original</button></div></div>
   <div class="row"><span id="sharpinfo">Nitidez del fondo</span><button class="btn sm" id="b-shm">−</button><input type="range" id="sharp" min="25" max="100" step="5" value="100"><button class="btn sm" id="b-shp">+</button></div>
   <div class="row"><span>Botones de la ayuda</span><div class="btns"><button class="btn" id="b-btmin">Minimalista</button><button class="btn" id="b-btcol">Colores</button></div></div>
   <div class="row"><span>Fondo animado</span><div class="btns"><button class="btn" id="b-bgon">Sí</button><button class="btn" id="b-bgoff">No</button></div></div>
   <div class="row"><span>Color del fondo</span><div class="btns"><button class="btn" id="b-cdef">Original</button><button class="btn" id="b-ccol">Color</button><button class="btn" id="b-crb">Arcoíris</button></div></div>
   <div class="row" id="r-col"><div class="sws" id="sws"></div><input type="color" id="colpick" value="#6b4fa0"></div>
   <div class="row" id="r-spd"><span>Velocidad</span><button class="btn sm" id="b-spm">−</button><input type="range" id="spd" min="1" max="100" value="30"><button class="btn sm" id="b-spp">+</button></div>
-  <div class="row"><span>Difuminado de la portada</span><button class="btn sm" id="b-blm">−</button><input type="range" id="blur" min="0" max="100" value="55"><button class="btn sm" id="b-blp">+</button></div>
+  <div class="row"><span id="blurinfo">Difuminado del fondo</span><button class="btn sm" id="b-blm">−</button><input type="range" id="blur" min="0" max="100" step="5" value="0"><button class="btn sm" id="b-blp">+</button></div>
   <div class="row"><span>Iniciar con Windows</span><div class="btns"><button class="btn" id="b-aton">Sí</button><button class="btn" id="b-atoff">No</button></div></div>
   <div class="row" id="r-min"><span>Iniciar minimizado</span><div class="btns"><button class="btn" id="b-mnon">Sí</button><button class="btn" id="b-mnoff">No</button></div></div>
   <div class="row"><span id="padinfo">Mando</span><div class="btns"><button class="btn" id="b-pad">Configurar botones</button><button class="btn" id="b-padreset">Restablecer</button></div></div>
@@ -368,7 +369,8 @@ const Wave = (() => {
   let vtex = null, vidOk = false, vLast = -1, uHV = null, uVR = null, uVT = null;
   vid.addEventListener('loadeddata', () => { vidOk = true; syncVid(); });
   vid.addEventListener('error', () => { vidOk = false; });
-  const vidWanted = () => on && xm && vidOk && !!gl;
+  let useVid = false;                           // "Fondo PS3": false = dibujado en HD (por defecto), true = video original
+  const vidWanted = () => on && xm && useVid && vidOk && !!gl;
   const syncVid = () => { if (vidWanted()) { if (vid.paused) vid.play().catch(() => {}); } else if (!vid.paused) vid.pause(); };
   let xm = 0;                                   // 1 = "Fondo original PS3" (video del XMB o la ola dibujada)
   // Nitidez del fondo (Ajustes): 100 % = resolución de la pantalla. Si la PC no da abasto, se baja a mano desde Ajustes.
@@ -408,42 +410,64 @@ float hash(vec2 v) { return fract(sin(dot(v, vec2(12.9898, 78.233))) * 43758.545
 // que se retuercen despacio. Cada lámina tiene un centro c(x) y una media altura con signo w(x): abierta se ve como un
 // velo suave; cuando w pasa por cero se ve de canto y la misma luz queda en una línea fina y brillante (el pliegue).
 // Es analítico (sin bucles por hebra), así que es muy liviano.
-float sheet(float y, float c, float w, float px) {
-  float h = abs(w) + px * 1.2;                                   // media altura en pantalla
-  float d = abs(y - c);
-  float dens = min(1.0, 0.0045 / h);                             // menos alto = más brillante
-  float inside = 1.0 - smoothstep(h - px, h + px, d);
-  float e = (d - h) / (px * 1.5);
-  return inside * (0.07 + 0.50 * dens) + exp(-e * e) * (0.09 + 0.22 * dens) + exp(-d * d / ((h + 0.03) * (h + 0.03))) * 0.035;
+// Una cinta translúcida que se retuerce, como la del XMB: centro c(x) y media altura con signo w(x).
+// Abierta = relleno suave y parejo con el borde de arriba como una línea fina y brillante; cuando w pasa por cero
+// se ve de canto y queda una sola línea brillante (el pliegue). Todo con antialias por píxel: nítido a cualquier resolución.
+float ribbonHD(float y, float c, float w, float px) {
+  float h = abs(w) + px * 0.8;
+  float d = y - c, ad = abs(d);
+  float dens = min(1.0, 0.0035 / h);                                    // más angosta = la misma luz más concentrada
+  // borde de arriba nítido; hacia abajo el relleno se desvanece solo (sin corte), como en el video
+  float inside = (1.0 - smoothstep(h - px, h + px, d)) * smoothstep(-h - 14.0 * px, -h + 18.0 * px, d);
+  float up = clamp((d + h) / (2.0 * h), 0.0, 1.0);                      // 0 abajo … 1 arriba dentro de la cinta
+  float fill = inside * ((0.02 + 0.10 * up * up) + 0.55 * dens);
+  float et = (d - h) / (px * 1.2);
+  float edges = exp(-et * et) * (0.16 + 0.40 * dens);                   // la línea fina y brillante de arriba
+  float halo = exp(-(d - h) * (d - h) / (50.0 * px * px)) * 0.03 * step(h, d);   // brillo suave por encima del borde
+  return fill + edges + halo;
 }
+// "Fondo original PS3" dibujado en HD (por defecto). Calcado del video: fondo azul más oscuro y violáceo arriba,
+// una cinta principal y dos secundarias que se retuercen despacio, bokeh a la izquierda y polvo fino sobre la ola.
 vec3 xmb(vec2 uv) {
   float asp = R.x / R.y, x = uv.x, y = uv.y, px = 1.0 / R.y;
-  vec3 top = mix(vec3(0.13, 0.21, 0.66), vec3(0.30, 0.22, 0.52), P);   // azul (PS4/Centrado) o morado (PS3)
-  vec3 bot = mix(vec3(0.19, 0.37, 0.88), vec3(0.47, 0.40, 0.72), P);
+  vec3 top = mix(vec3(0.137, 0.200, 0.640), vec3(0.30, 0.22, 0.52), P);   // azul (PS4/Centrado) o morado (PS3)
+  vec3 bot = mix(vec3(0.180, 0.330, 0.900), vec3(0.47, 0.40, 0.72), P);
   top = mix(top, C * 0.70, K); bot = mix(bot, mix(C, vec3(1.0), 0.10), K);
-  vec3 col = mix(bot, top, pow(y, 0.9));
-  col *= 1.0 - 0.10 * pow(abs(x - 0.5) * 2.0, 2.0);                       // bordes apenas más oscuros
-  // Láminas: lentas (una vuelta cada ~30-50 s), el pliegue viaja a lo largo de la ola
+  vec3 col = mix(bot, top, smoothstep(0.0, 1.0, y));
   float t = T;
-  float c0 = 0.46 + 0.080 * sin(3.1 * x + 0.18 * t - 1.2) + 0.025 * sin(5.5 * x - 0.11 * t + 1.3);
-  float w0 = 0.075 * sin(2.3 * x - 0.21 * t + 0.8) + 0.02 * sin(5.3 * x + 0.13 * t);
-  float c1 = c0 + 0.012 + 0.035 * sin(3.7 * x + 0.15 * t + 2.0);
-  float w1 = 0.055 * sin(1.8 * x + 0.17 * t + 2.5);
-  float c2 = c0 - 0.015 + 0.040 * sin(2.4 * x - 0.12 * t + 4.0);
-  float w2 = 0.090 * sin(1.3 * x + 0.10 * t + 4.2);
-  float a = 0.0, dyc = y - c0;
-  if (abs(dyc) < 0.26) a = sheet(y, c0, w0, px) + 0.8 * sheet(y, c1, w1, px) + 0.55 * sheet(y, c2, w2, px);
-  vec3 wc = mix(bot, vec3(1.0), 0.78);
-  col += wc * min(a, 1.1) * 0.8;
-  // Destellos: pocos, pegados a la ola y sobre todo a la izquierda; titilan y se desplazan muy despacio
-  vec2 sp = vec2(x * asp + T * 0.006, y) * 110.0;
+  float c0 = 0.45 + 0.075 * sin(2.6 * x + 0.20 * t - 0.6) + 0.030 * sin(5.3 * x - 0.13 * t + 1.1);
+  float w0 = 0.065 * sin(2.2 * x - 0.23 * t + 0.9) + 0.018 * sin(5.9 * x + 0.15 * t);
+  float c1 = c0 - 0.012 + 0.030 * sin(3.4 * x + 0.17 * t + 2.2);
+  float w1 = 0.045 * sin(1.7 * x + 0.19 * t + 2.6);
+  float c2 = c0 + 0.010 + 0.035 * sin(2.1 * x - 0.14 * t + 4.1);
+  float w2 = 0.080 * sin(1.2 * x + 0.11 * t + 4.3);
+  float dyc = y - c0;
+  col += mix(bot, vec3(1.0), 0.25) * 0.05 * exp(-dyc * dyc / 0.02);      // brillo amplio donde pasa la ola
+  if (abs(dyc) < 0.25) {
+    float a = ribbonHD(y, c0, w0, px) + 0.45 * ribbonHD(y, c1, w1, px) + 0.30 * ribbonHD(y, c2, w2, px);
+    col += mix(bot, vec3(1.0), 0.72) * min(a, 1.2) * 0.75;
+  }
+  // Bokeh (luces redondas de varios tamaños) apiñado a la izquierda, pegado a la ola, que sube muy despacio
+  vec2 bp = vec2(x * asp, y - t * 0.004) * 38.0;
+  vec2 bc = floor(bp), bf = fract(bp);
+  float bh = hash(bc), nearL = exp(-dyc * dyc / 0.006) * (1.0 - smoothstep(0.0, 0.16, x));
+  if (bh < 0.55 * nearL) {
+    vec2 cc = vec2(hash(bc + 1.7), hash(bc + 4.3)) * 0.6 + 0.2;
+    float rad = (1.5 + 5.5 * hash(bc + 7.7)) * px * 38.0;                    // 1.5 a 7 px
+    float dd = length(bf - cc);
+    float disc = 1.0 - smoothstep(rad - px * 38.0, rad + px * 38.0, dd);
+    float tw = 0.55 + 0.45 * sin(t * (0.6 + hash(bc + 9.1)) + bh * 60.0);
+    col += vec3(1.0) * disc * tw * (0.25 + 0.35 * hash(bc + 3.3));
+  }
+  // Polvo fino: puntitos de 1-2 px sobre la ola y algunos sueltos, que titilan
+  vec2 sp = vec2(x * asp + t * 0.006, y) * 120.0;
   vec2 cell = floor(sp), fr = fract(sp);
-  float hh = hash(cell), near = exp(-dyc * dyc / 0.0045);
-  if (hh < 0.0004 + near * (0.012 + 0.16 * (1.0 - smoothstep(0.0, 0.4, x)))) {
+  float hh = hash(cell), near = exp(-dyc * dyc / 0.004);
+  if (hh < 0.0006 + near * (0.018 + 0.10 * (1.0 - smoothstep(0.0, 0.45, x)))) {
     vec2 cc = vec2(hash(cell + 1.7), hash(cell + 4.3)) * 0.7 + 0.15;
-    float r = length((fr - cc) / 110.0) / (px * 1.3);
-    float tw = 0.35 + 0.65 * sin(T * (0.7 + 1.8 * hash(cell + 9.1)) + hh * 400.0);
-    col += vec3(1.0) * exp(-r * r) * max(tw, 0.0) * (0.35 + 0.55 * near);
+    float r = length((fr - cc) / 120.0) / (px * 1.1);
+    float tw = 0.35 + 0.65 * sin(t * (0.7 + 1.8 * hash(cell + 9.1)) + hh * 400.0);
+    col += vec3(1.0) * exp(-r * r) * max(tw, 0.0) * (0.35 + 0.5 * near);
   }
   return col;
 }
@@ -570,7 +594,7 @@ void main() {
       const c = Tint.color();
       gl.uniform3f(uC, c[0], c[1], c[2]); gl.uniform1f(uK, Tint.active() ? 1 : 0);
       let hv = 0;
-      if (xm && vidOk && vid.readyState >= 2) {
+      if (xm && useVid && vidOk && vid.readyState >= 2) {
         if (vid.currentTime !== vLast) {                  // solo se sube a la GPU cuando el video tiene un cuadro nuevo
           vLast = vid.currentTime;
           try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, vid); } catch { vidOk = false; }
@@ -591,13 +615,14 @@ void main() {
     },
     size, theme(v) { purple = v; },
     style(v) { xm = v ? 1 : 0; size(); if (on) { last = 0; } syncVid(); },
+    videoMode(v) { useVid = !!v; syncVid(); },
     sharpness(v) { sharp = Math.max(25, Math.min(100, Math.round(v))); size(); },
     video(url) { if (url && vid.getAttribute('src') !== url) { vidOk = false; vLast = -1; vid.src = url; } },
     // Para la tecla F: qué dibuja el fondo (GPU real o software) y a qué resolución
     info() {
       let r = gl ? 'WebGL' : ctx2 ? 'canvas 2D' : 'sin iniciar';
       try { const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); if (d) r = gl.getParameter(d.UNMASKED_RENDERER_WEBGL).replace(/^ANGLE \(|\)$/g, '').replace(/\s*\(0x[0-9a-f]+\)/i, '').slice(0, 70); } catch {}
-      return `  ·  fondo: ${r}${xm && vidOk ? ' · video XMB' : ''} · ${cv.width}x${cv.height} (nitidez ${sharp} %)`;
+      return `  ·  fondo: ${r}${xm ? (useVid && vidOk ? ' · video XMB' : ' · ola PS3 en HD') : ''} · ${cv.width}x${cv.height} (nitidez ${sharp} %)`;
     }
   };
 })();
@@ -662,7 +687,7 @@ function sizeTiles() {
 function resize() {
   u = Math.min(innerWidth / 1920, innerHeight / 1080);
   document.documentElement.style.setProperty('--u', u + 'px');
-  sizeTiles(); placeStatic(); place(true); Wave.size();
+  sizeTiles(); placeStatic(); place(true); Wave.size(); applyBgBlur();
 }
 addEventListener('resize', resize);
 
@@ -1015,7 +1040,7 @@ async function changeCover() {
   if (!it || it.type === 'add' || it.type === 'cfg' || pickerOpen()) return;
   hideArt();
   const r = await window.api.pickPlaces(it.id);
-  pk = { item: it, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: [...r.places, { name: 'Explorador de Windows…', win: true }] };
+  pk = { item: it, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: [...r.places, { name: 'Buscar en Google…', google: true }, { name: 'Explorador de Windows…', win: true }] };
   $('#pk-title').textContent = 'Portada: ' + it.name;
   pkPlaces.innerHTML = '';
   pk.places.forEach((p, k) => {
@@ -1098,6 +1123,7 @@ async function pkActivate() {
   if (!pk) return;
   if (pk.zone === 'places') {
     const p = pk.places[pk.pi];
+    if (p.google) { const it = pk.item; closePicker(); window.api.googleCover(it.id); return; }
     if (p.win) {                                               // el diálogo clásico de Windows, por si hace falta
       const it = pk.item, url = await window.api.setCover(it.id);
       if (url) { setCoverUrl(it, url); closePicker(); toast('Portada cambiada'); }
@@ -1186,12 +1212,14 @@ function hdClose(quiet) {
   armArt();
 }
 function hdHint() {
-  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc' };
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc', remove: 'G' };
   const okTxt = hd && hd.none ? 'buscar en mi PC' : 'aplicar';
-  $('#hd-foot').innerHTML = `<span class="hk" data-a="ok">${glyph(L.ok, k)}${okTxt}</span><span class="hk" data-a="end">${glyph(L.back, k)}cerrar</span>` +
-    (hd && hd.none ? '' : '<span class="hk">flechas: elegir · 1-9: directo</span>');
+  $('#hd-foot').innerHTML = `<span class="hk" data-a="ok">${glyph(L.ok, k)}${okTxt}</span><span class="hk" data-a="google">${glyph(L.remove, k)}buscar en Google</span>` +
+    `<span class="hk" data-a="end">${glyph(L.back, k)}cerrar</span>` + (hd && hd.none ? '' : '<span class="hk">flechas: elegir · 1-9: directo</span>');
 }
-$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'end') hdClose(); });
+// Google Imágenes en una ventana del launcher (el usuario elige con clic derecho → "Usar esta imagen como portada")
+function hdGoogle() { if (!hd) return; const it = hd.it; hdClose(); window.api.googleCover(it.id); }
+$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'google') hdGoogle(); else if (a === 'end') hdClose(); });
 hdEl.addEventListener('click', e => { if (e.target === hdEl) hdClose(); });            // clic fuera de la ventana = cerrar
 hdEl.addEventListener('contextmenu', e => { e.preventDefault(); hdClose(); });
 async function removeCurrent() {
@@ -1350,6 +1378,14 @@ bgVid.addEventListener('error', () => {
 $('#b-bgvid').onclick = pickVideo;
 $('#b-bgcls').onclick = () => setBgType('classic');
 $('#b-bgps3').onclick = () => setBgType('ps3');
+// Fondo PS3: la ola dibujada en HD (nítida a cualquier resolución) o el video original del XMB (720p, más borroso)
+function setPs3Src(s, save = true) {
+  Wave.videoMode(s === 'video');
+  $('#b-psh').classList.toggle('on', s !== 'video'); $('#b-psv').classList.toggle('on', s === 'video');
+  if (save) window.api.setCfg({ ps3Src: s });
+}
+$('#b-psh').onclick = () => setPs3Src('hd');
+$('#b-psv').onclick = () => setPs3Src('video');
 // Nitidez del fondo: a qué resolución se dibuja (100 % = la de la pantalla). Si con 100 % se traba, se baja de a 10.
 function setBgSharp(v, save = true) {
   v = Math.max(25, Math.min(100, Math.round(v / 5) * 5));
@@ -1368,19 +1404,24 @@ function setBtnStyle(s, save = true) {
 }
 $('#b-btmin').onclick = () => setBtnStyle('min');
 $('#b-btcol').onclick = () => setBtnStyle('color');
-// Difuminado del fondo con la portada (0 = nítida). Con Ajustes abierto se ve la portada del juego elegido para comparar.
-function previewArt() {
-  const it = items[sel];
-  if (layout !== 'ps3' && it && it.type !== 'add' && it.type !== 'cfg' && covers[it.id]) showArt(it, true);
+// Difuminado del fondo (0 = nítido … 100 = muy difuminado): difumina todo el fondo animado (cintas, ola PS3, video).
+// Es un filtro de la GPU sobre #bg; se agranda un poco para que los bordes difuminados no dejen ver el negro de atrás.
+let bgBlur = 0;
+function applyBgBlur() {
+  const px = bgBlur * .3 * u;                                  // hasta ~30 px en 1080p
+  $('#bg').style.filter = px > 0 ? `blur(${px.toFixed(1)}px)` : '';
+  $('#bg').style.transform = px > 0 ? `scale(${(1 + px * 4 / innerWidth).toFixed(4)})` : '';
 }
-function setArtBlur(v, save = true) {
-  artBlur = Math.max(0, Math.min(100, Math.round(v))); $('#blur').value = artBlur;
-  if (save) { window.api.setCfg({ artBlur }); previewArt(); }
+function setBgBlur(v, save = true) {
+  bgBlur = Math.max(0, Math.min(100, Math.round(v))); $('#blur').value = bgBlur;
+  $('#blurinfo').textContent = `Difuminado del fondo: ${bgBlur} %`;
+  applyBgBlur();
+  if (save) window.api.setCfg({ bgBlur });
 }
-$('#blur').addEventListener('input', e => { artBlur = +e.target.value; previewArt(); });
-$('#blur').addEventListener('change', e => setArtBlur(+e.target.value));
-$('#b-blm').onclick = () => setArtBlur(artBlur - 10);
-$('#b-blp').onclick = () => setArtBlur(artBlur + 10);
+$('#blur').addEventListener('input', e => setBgBlur(+e.target.value, false));
+$('#blur').addEventListener('change', e => setBgBlur(+e.target.value));
+$('#b-blm').onclick = () => setBgBlur(bgBlur - 10);
+$('#b-blp').onclick = () => setBgBlur(bgBlur + 10);
 function setAuto(on, save = true) {
   $('#b-aton').classList.toggle('on', on); $('#b-atoff').classList.toggle('on', !on); $('#r-min').classList.toggle('dim', !on);
   if (save) window.api.setCfg({ autostart: on });
@@ -1513,6 +1554,7 @@ addEventListener('keydown', e => {
     else if (k === 'ArrowUp') hdMove(-3);
     else if (k === 'Enter') hdChoose();
     else if (k === 'Backspace') hdClose();
+    else if (k.toLowerCase() === 'g') hdGoogle();
     else if (k === 'Escape') hdClose();
     else if (k >= '1' && k <= '9' && hd && +k <= hd.opts.length) { hd.f = +k - 1; hdMark(); hdChoose(); }
     e.preventDefault();
@@ -1671,7 +1713,7 @@ function poll() {
   if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
   const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
   if (hdOpen()) {
-    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose);
+    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose); edge('remove', on('remove'), hdGoogle);
     repH(on('right') ? 1 : on('left') ? -1 : 0, now, hdMove);
     repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => hdMove(d * 3));
     return;
@@ -1858,9 +1900,11 @@ window.api.onResume(() => {
   Tint.set({ mode: c.bgMode || 'default', hex: bgHex, speed: Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30 });
   $('#spd').value = Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30;
   syncColorUI();
-  setArtBlur(Number.isFinite(c.artBlur) ? c.artBlur : 55, false);
+  artBlur = Number.isFinite(c.artBlur) ? c.artBlur : 55;     // difuminado de la portada de fondo: fijo (el ajuste ahora es del fondo animado)
+  setBgBlur(Number.isFinite(c.bgBlur) ? c.bgBlur : 0, false);
   Wave.video(c.xmbVideo);
   setBgSharp(Number.isFinite(c.bgSharp) ? c.bgSharp : 100, false);
+  setPs3Src(c.ps3Src === 'video' ? 'video' : 'hd', false);
   bgVideoUrl = c.bgVideo || ''; setBgType(c.bgType || 'classic', false);
   setBtnStyle(c.btnStyle || 'min', false);
   setBg(c.bg !== false, false);
@@ -1868,6 +1912,7 @@ window.api.onResume(() => {
   padMaps = c.padMaps || {};
   resize();
   window.api.onLibrary(() => load());
+  window.api.onNote(m => toast(m, 5000));
   window.api.onCover(({ id, url }) => { covers[id] = url; const k = items.findIndex(g => g.id === id); if (k >= 0 && tiles[k]?._setImg) tiles[k]._setImg(url); if (k === sel && !settingsOpen()) armArt(); });
   await load(true);
   hintEmpty();

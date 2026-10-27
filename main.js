@@ -1166,6 +1166,61 @@ ipcMain.handle('pickApply', (e, id, file) => {
   } catch { return null; }
 });
 
+// ---------- Buscar portada en Google Imágenes (ventana dentro del launcher) ----------
+// Se abre Google Imágenes con la búsqueda hecha (imágenes grandes y horizontales). El usuario hace clic en una imagen
+// para verla grande y con clic derecho → "Usar esta imagen como portada". No se lee ni se modifica la página de Google:
+// solo se usa la dirección de la imagen sobre la que se hizo clic derecho. Sesión aparte ('persist:google').
+let gWin = null;
+const isGoogle = u => { try { return /(^|\.)google\.[a-z.]+$/i.test(new URL(u).hostname) || /(^|\.)gstatic\.com$/i.test(new URL(u).hostname); } catch { return false; } };
+function note(msg) { if (win && !win.isDestroyed()) win.webContents.send('note', msg); }
+async function useGoogleImage(id, src) {
+  try {
+    let buf;
+    if (src.startsWith('data:')) buf = Buffer.from(src.slice(src.indexOf(',') + 1), 'base64');
+    else {
+      try { const r = await gWin.webContents.session.fetch(src, { signal: AbortSignal.timeout(20000) }); if (!r.ok) throw 0; buf = Buffer.from(await r.arrayBuffer()); }
+      catch { buf = await download(src, { 'User-Agent': 'Mozilla/5.0', Referer: 'https://www.google.com/' }); }
+    }
+    const s = imgSize(buf);
+    if (!s) { note('No se pudo leer esa imagen; probá con otra'); return; }
+    saveCover(id, buf);
+    (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();
+    coverFail.delete(id);
+    const lg = lib.games.find(x => x.id === id);
+    if (lg && lg.cover !== coverFile(id)) { lg.cover = coverFile(id); saveLib(); }
+    if (win && !win.isDestroyed()) win.webContents.send('cover', { id, url: coverUrl(coverFile(id)) });
+    if (gWin && !gWin.isDestroyed()) gWin.close();
+    note(s.width < 800 ? `Portada aplicada, pero es chica (${s.width}x${s.height}): la próxima hacé clic en la imagen y usá la grande` : `Portada aplicada (${s.width}x${s.height})`);
+  } catch { note('No se pudo descargar esa imagen; probá con otra'); }
+}
+ipcMain.handle('googleCover', async (e, id) => {
+  const g = listGames().find(x => x.id === id);
+  if (!g || !win) return;
+  if (gWin && !gWin.isDestroyed()) { gWin.focus(); return; }
+  const q = ((await gameNames(g).catch(() => []))[0] || g.name) + ' wallpaper';
+  const url = 'https://www.google.com/search?tbm=isch&tbs=isz:l,iar:w&q=' + encodeURIComponent(q);   // grandes y horizontales
+  const b = win.getBounds(), w = Math.round(b.width * .82), h = Math.round(b.height * .86);
+  gWin = new BrowserWindow({
+    parent: win, modal: true, width: w, height: h, x: b.x + Math.round((b.width - w) / 2), y: b.y + Math.round((b.height - h) / 2),
+    title: `Portada para ${g.name} — hacé clic en una imagen y después clic derecho → "Usar esta imagen como portada" (Esc cierra)`,
+    backgroundColor: '#202124', autoHideMenuBar: true,
+    webPreferences: { partition: 'persist:google', contextIsolation: true, sandbox: true, nodeIntegration: false }
+  });
+  gWin.setMenu(null);
+  gWin.on('page-title-updated', e => e.preventDefault());                     // deja fijo el título con las instrucciones
+  gWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));          // "Visitar" y similares no abren ventanas
+  gWin.webContents.on('will-navigate', (e, u) => { if (!isGoogle(u)) e.preventDefault(); });
+  gWin.webContents.on('before-input-event', (e, i) => { if (i.type === 'keyDown' && i.key === 'Escape') { e.preventDefault(); gWin.close(); } });
+  gWin.webContents.on('context-menu', (e, p) => {
+    const items = [];
+    if (p.mediaType === 'image' && p.srcURL) items.push({ label: 'Usar esta imagen como portada', click: () => useGoogleImage(id, p.srcURL) }, { type: 'separator' });
+    items.push({ label: 'Volver a la búsqueda', click: () => gWin.loadURL(url) }, { label: 'Cerrar', click: () => gWin.close() });
+    Menu.buildFromTemplate(items).popup({ window: gWin });
+  });
+  gWin.on('closed', () => { gWin = null; if (win && !win.isDestroyed()) win.focus(); });
+  gWin.loadURL(url);
+});
+
 // ---------- Video de fondo ----------
 // Se elige en dos pasos para que la interfaz pueda avisar "Copiando…": el archivo se copia a la carpeta de datos
 // (sigue funcionando aunque muevas o borres el original). Solo se copia la ruta que salió del diálogo, nunca una que mande la interfaz.
@@ -1204,7 +1259,7 @@ ipcMain.handle('useVideo', async () => {
   } catch (e) { return { error: 'No se pudo copiar el video (¿falta espacio?)' }; }
 });
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgSharp: Number.isFinite(cfg.bgSharp) ? cfg.bgSharp : 100, bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgSharp: Number.isFinite(cfg.bgSharp) ? cfg.bgSharp : 100, bgBlur: Number.isFinite(cfg.bgBlur) ? cfg.bgBlur : 0, ps3Src: cfg.ps3Src || 'hd', bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
   if (patch.layout === 'ps4' || patch.layout === 'center' || patch.layout === 'ps3') cfg.layout = patch.layout;
@@ -1220,6 +1275,8 @@ ipcMain.handle('setCfg', (e, patch) => {
   if (['classic', 'ps3', 'video'].includes(patch.bgType)) cfg.bgType = patch.bgType;
   if (patch.btnStyle === 'min' || patch.btnStyle === 'color') cfg.btnStyle = patch.btnStyle;
   if (Number.isFinite(patch.artBlur)) cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
+  if (patch.ps3Src === 'hd' || patch.ps3Src === 'video') cfg.ps3Src = patch.ps3Src;
+  if (Number.isFinite(patch.bgBlur)) cfg.bgBlur = Math.max(0, Math.min(100, Math.round(patch.bgBlur)));
   if (Number.isFinite(patch.bgSharp)) cfg.bgSharp = Math.max(25, Math.min(100, Math.round(patch.bgSharp)));
   saveCfg();
   if ('hideTaskbar' in patch) syncTaskbar();
