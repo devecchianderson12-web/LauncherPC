@@ -495,6 +495,55 @@ public static class SH {
   [DllImport(\"user32.dll\")] static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport(\"user32.dll\")] static extern bool IsWindowVisible(IntPtr h);
 
+  // ----- Mando: L1+R1+L2+R2 a la vez = abrir/ocultar el launcher (tambien con un juego delante) -----
+  // XInput (Xbox y compatibles) + winmm (PlayStation, Nintendo y mandos DirectInput: botones 5-8 = L1 R1 L2 R2).
+  // Cada 3 s se buscan mandos y solo si hay alguno se leen 20 veces por segundo: sin mando conectado no gasta nada.
+  [StructLayout(LayoutKind.Sequential)] struct XGP { public ushort buttons; public byte lt; public byte rt; public short lx, ly, rx, ry; }
+  [StructLayout(LayoutKind.Sequential)] struct XST { public uint packet; public XGP pad; }
+  [StructLayout(LayoutKind.Sequential)] struct JOYEX { public uint size, flags, x, y, z, r, u, v, buttons, buttonNumber, pov, res1, res2; }
+  [DllImport(\"xinput1_4.dll\")] static extern uint XInputGetState(uint i, out XST s);
+  [DllImport(\"winmm.dll\")] static extern uint joyGetPosEx(uint id, ref JOYEX j);
+  [DllImport(\"winmm.dll\")] static extern uint joyGetNumDevs();
+  [DllImport(\"winmm.dll\")] static extern uint joyGetDevCapsW(UIntPtr id, byte[] caps, uint size);
+  static TimerProc padScanTp, padPollTp;
+  static bool[] xOn = new bool[4]; static System.Collections.Generic.List<uint> joys = new System.Collections.Generic.List<uint>();
+  static UIntPtr padPollId; static bool comboDown, xinputOk = true;
+
+  static JOYEX NewJoy() { JOYEX j = new JOYEX(); j.size = (uint)Marshal.SizeOf(typeof(JOYEX)); j.flags = 0x80; return j; }   // JOY_RETURNBUTTONS
+  static bool XCombo(uint i) {
+    XST s; if (XInputGetState(i, out s) != 0) { xOn[i] = false; return false; }
+    return (s.pad.buttons & 0x0300) == 0x0300 && s.pad.lt > 100 && s.pad.rt > 100;     // LB + RB + LT + RT
+  }
+  static bool JCombo(uint id) { JOYEX j = NewJoy(); return joyGetPosEx(id, ref j) == 0 && (j.buttons & 0xF0) == 0xF0; }
+  static void PadScan(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
+    if (xinputOk) {
+      try { for (uint i = 0; i < 4; i++) { XST s; xOn[i] = XInputGetState(i, out s) == 0; } }
+      catch { xinputOk = false; }                           // Windows sin xinput1_4.dll
+    }
+    try {
+      joys.Clear();
+      uint n = Math.Min(joyGetNumDevs(), 16u); byte[] caps = new byte[728];
+      for (uint j = 0; j < n; j++) {
+        JOYEX st = NewJoy();
+        if (joyGetPosEx(j, ref st) != 0) continue;
+        if (joyGetDevCapsW((UIntPtr)j, caps, 728) == 0 && BitConverter.ToUInt16(caps, 0) == 0x045E) continue;   // Xbox: ya se lee por XInput
+        joys.Add(j);
+      }
+    } catch {}
+    bool any = joys.Count > 0; for (int i = 0; i < 4; i++) any |= xOn[i];
+    if (any && padPollId == UIntPtr.Zero) padPollId = SetTimer(IntPtr.Zero, UIntPtr.Zero, 50, padPollTp);
+    else if (!any && padPollId != UIntPtr.Zero) { KillTimer(IntPtr.Zero, padPollId); padPollId = UIntPtr.Zero; comboDown = false; }
+  }
+  static void PadPoll(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
+    bool c = false;
+    try {
+      if (xinputOk) for (uint i = 0; i < 4; i++) if (xOn[i] && XCombo(i)) c = true;
+      foreach (uint j in joys) if (JCombo(j)) c = true;
+    } catch {}
+    if (c && !comboDown) { Console.WriteLine(\"PAD\"); Console.Out.Flush(); }   // una vez por pulsacion: hay que soltar para repetir
+    comboDown = c;
+  }
+
   static uint self; static string last = \"\"; static volatile bool tb;
   static WinEventProc wep; static TimerProc tp, bp;
   static IntPtr showHook; static uint hookPid; static UIntPtr burstId; static int burstLeft, hideWin, hideCnt;
@@ -591,6 +640,9 @@ public static class SH {
     Thread t = new Thread(ReadCmds); t.IsBackground = true; t.Start();
     SetWinEventHook(3, 3, IntPtr.Zero, wep, 0, 0, 0);       // EVENT_SYSTEM_FOREGROUND, fuera de proceso
     SetTimer(IntPtr.Zero, UIntPtr.Zero, 2000, tp);
+    padScanTp = new TimerProc(PadScan); padPollTp = new TimerProc(PadPoll);
+    SetTimer(IntPtr.Zero, UIntPtr.Zero, 3000, padScanTp);
+    PadScan(IntPtr.Zero, 0, UIntPtr.Zero, 0);
     Rehook();
     Check();
     MSG m;
@@ -624,6 +676,7 @@ function startShell() {
     while ((i = shellBuf.indexOf('\n')) >= 0) {
       const l = shellBuf.slice(0, i).trim(); shellBuf = shellBuf.slice(i + 1);
       if (l === 'SELF' || l === 'OTHER' || l === 'NONE') onForeground(l);
+      else if (l === 'PAD') padCombo();
     }
   });
   shellSend('TB ' + (tbWanted ? 1 : 0));
@@ -682,7 +735,15 @@ function onForeground(s) {
   // NONE: nadie tiene el foco (se acaba de cerrar el programa). Se espera 0,4 s por si Windows activa otra ventana; si no, el launcher pasa al frente
   else if (paused) noneT = setTimeout(() => { noneT = null; resumeLauncher(true); }, 400);
 }
-function toggle() { if (paused) showLauncher(); else win.isVisible() && !hideT ? hideLauncher() : showLauncher(); }
+// L1+R1+L2+R2 en cualquier mando: igual que Ctrl+Alt+P (con freno para no alternar dos veces seguidas)
+let padComboAt = 0;
+function padCombo() {
+  const now = Date.now();
+  if (now - padComboAt < 700 || !win || win.isDestroyed()) return;
+  padComboAt = now;
+  toggle();
+}
+function toggle() {if (paused) showLauncher(); else win.isVisible() && !hideT ? hideLauncher() : showLauncher(); }
 function notifyLibrary() { if (win && !win.isDestroyed()) win.webContents.send('library'); }
 // Inicio con Windows. En la versión portable el .exe real es PORTABLE_EXECUTABLE_FILE (process.execPath apunta a una carpeta temporal).
 // "Minimizado" solo aplica al arranque de Windows: se pasa --hidden en el registro, un doble clic normal siempre abre el launcher.

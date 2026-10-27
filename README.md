@@ -9,7 +9,12 @@ y permite añadir cualquier .exe con portada automática.
   dispositivo que uses (✕ ○ □ △ / L1 R1 en PlayStation, A B X Y / LB RB en Xbox, A B X Y / L R en Nintendo, donde A es el botón derecho).
   Aceptar jugar, atrás cerrar, cuadrado/X quitar, triángulo/Y portada, L1/LB buscar juegos, R1/RB cambia de diseño; cruceta o stick izquierdo para moverte.
   Dentro de **Ajustes** también se maneja con el mando (cruceta para moverte, aceptar pulsa, atrás cierra).
-  Con un mando que no sea estándar: **Ajustes > Configurar botones** te pide cada botón y lo guarda para ese mando (**Restablecer** lo borra).
+  Los mandos DirectInput genéricos (o PlayStation/8BitDo en modo D) también vienen predefinidos (□ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9)
+  y la ayuda muestra el nombre real de cada botón, también si lo configuraste a mano.
+  Si un mando raro no encaja: **Ajustes > Configurar botones** te pide cada botón y lo guarda para ese mando (**Restablecer** lo borra).
+- **L1 + R1 + L2 + R2 a la vez** (LB RB LT RT en Xbox, L R ZL ZR en Nintendo): abre/oculta el launcher como Ctrl+Alt+P, **también con un juego delante**.
+  Lo lee el ayudante de Windows (XInput + winmm); cada 3 s busca mandos y solo lee mientras haya alguno conectado.
+  Con el launcher delante, L1/R1/L2 esperan 180 ms antes de actuar para no disparar sus acciones al hacer la combinación.
 - Estadísticas arriba a la derecha: CPU/RAM del sistema; GPU NVIDIA con nvidia-smi.
   (Uso/temperatura de GPU AMD/Intel: LibreHardwareMonitor con Options > "Remote Web Server" > Run, puerto 8085.)
 - **F** muestra los fps, el modo gráfico y el estado de la GPU (para diagnosticar lentitud).

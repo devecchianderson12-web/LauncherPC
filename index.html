@@ -1077,21 +1077,27 @@ addEventListener('keydown', e => {
 });
 
 // ---------- Mando (solo mientras está visible) ----------
-// Funciona con Xbox, PlayStation, Nintendo y cualquier mando con disposición "standard" sin configurar nada.
-// Con mandos de otro tipo (sin esa disposición) se usa Ajustes > Configurar botones; se guarda por mando.
+// Funciona sin configurar nada con Xbox, PlayStation, Nintendo, cualquier mando "standard" y los DirectInput genéricos
+// (orden habitual: □ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9). Si un mando raro no encaja: Ajustes > Configurar botones.
 // La ayuda de la parte de arriba muestra los botones del último dispositivo usado (teclado o el mando que hayas tocado).
+// L1+R1+L2+R2 a la vez abre/oculta el launcher: lo lee main.js (también con un juego delante), aquí solo se evita que esos botones actúen sueltos.
 const STD = { ok: [{ b: 0 }], back: [{ b: 1 }], remove: [{ b: 2 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }],
   up: [{ b: 12 }, { a: 1, s: -1 }], down: [{ b: 13 }, { a: 1, s: 1 }], left: [{ b: 14 }, { a: 0, s: -1 }], right: [{ b: 15 }, { a: 0, s: 1 }] };
 const PROFILES = {
   xbox: STD, ps: STD,
   nin: { ...STD, ok: [{ b: 1 }], back: [{ b: 0 }], remove: [{ b: 3 }], cover: [{ b: 2 }] },          // en Nintendo A es el botón de la derecha
-  generic: { ...STD, up: [{ a: 1, s: -1 }], down: [{ a: 1, s: 1 }], left: [{ a: 0, s: -1 }], right: [{ a: 0, s: 1 }] }
+  // DirectInput: 0 □ (oeste) · 1 ✕ (sur) · 2 ○ (este) · 3 △ (norte); la cruceta llega como eje 9 (arriba -1, derecha -0,43, abajo 0,14, izquierda 0,71)
+  generic: { ok: [{ b: 1 }], back: [{ b: 2 }], remove: [{ b: 0 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }],
+    up: [{ a: 9, v: -1 }, { a: 1, s: -1 }], down: [{ a: 9, v: .14 }, { a: 1, s: 1 }], left: [{ a: 9, v: .71 }, { a: 0, s: -1 }], right: [{ a: 9, v: -.43 }, { a: 0, s: 1 }] }
 };
-const LABELS = {
-  xbox: { ok: 'A', back: 'B', remove: 'X', cover: 'Y', scan: 'LB', layout: 'RB', upgrade: 'LT' },
-  ps: { ok: '✕', back: '○', remove: '□', cover: '△', scan: 'L1', layout: 'R1', upgrade: 'L2' },
-  nin: { ok: 'A', back: 'B', remove: 'X', cover: 'Y', scan: 'L', layout: 'R', upgrade: 'ZL' }
+// Nombre de cada botón según el tipo de mando (índices de la API Gamepad)
+const BTN = {
+  xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menú', 'LS', 'RS', '↑', '↓', '←', '→', 'Xbox'],
+  ps: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', '↑', '↓', '←', '→', 'PS'],
+  nin: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'LS', 'RS', '↑', '↓', '←', '→', 'Home'],
+  generic: ['□', '✕', '○', '△', 'L1', 'R1', 'L2', 'R2', 'Select', 'Start', 'L3', 'R3']
 };
+const HAT = [[-1, '↑'], [-.43, '→'], [.14, '↓'], [.71, '←']];
 const KIND_NAME = { xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo', generic: 'Mando genérico' };
 let padMaps = {}, padIdx = -1, padSig = {}, hintKey = 'kb';
 const hintKb = $('#hint').innerHTML;
@@ -1104,12 +1110,18 @@ function kindOf(gp) {
   return gp.mapping === 'standard' ? 'xbox' : 'generic';      // estándar desconocido = mismo reparto que Xbox
 }
 const profileOf = gp => padMaps[gp.id] ? { ...PROFILES.generic, ...padMaps[gp.id] } : PROFILES[kindOf(gp)];
-const lbl = bd => !bd ? '?' : bd.b != null ? 'Botón ' + (bd.b + 1) : (bd.s ? (bd.s < 0 ? '◀' : '▶') : 'Eje ' + bd.a);
+// También con botones configurados a mano se muestra su nombre (✕, A, L1…), no "Botón 3"
+function lbl(bd, kind) {
+  if (!bd) return '?';
+  if (bd.b != null) return BTN[kind][bd.b] || 'Botón ' + (bd.b + 1);
+  if (bd.s) return bd.s < 0 ? '◀' : '▶';
+  const h = HAT.find(([v]) => Math.abs(v - bd.v) < .15);
+  return h ? h[1] : 'Eje ' + bd.a;
+}
 function labelsOf(gp) {
-  const k = kindOf(gp);
-  if (LABELS[k] && !padMaps[gp.id]) return LABELS[k];
-  const P = profileOf(gp);
-  return { ok: lbl(P.ok[0]), back: lbl(P.back[0]), remove: lbl(P.remove[0]), cover: lbl(P.cover[0]), scan: lbl(P.scan[0]), layout: lbl(P.layout[0]), upgrade: lbl(P.upgrade?.[0]) };
+  const k = kindOf(gp), P = profileOf(gp), o = {};
+  for (const a of ['ok', 'back', 'remove', 'cover', 'scan', 'layout', 'upgrade']) o[a] = lbl(P[a]?.[0], k);
+  return o;
 }
 function setHint(gp) {                                        // gp = null -> teclado
   const key = gp ? gp.id + (padMaps[gp.id] ? '*' : '') : 'kb';
@@ -1135,7 +1147,7 @@ function bound(gp, bd) {
 }
 const sigOf = g => g.buttons.map(b => b.pressed ? 1 : 0).join('') + '|' + g.axes.map(a => Math.abs(a) > .6 ? 1 : 0).join('');
 
-let prev = {}, pollT = null;
+let prev = {}, pollT = null, shT = null, shBlock = false;
 // Mantener pulsado: primer paso al instante y luego repetición (más rápida pasado ~0,45 s); una instancia por eje
 const mkRep = () => { let d = 0, at = 0, last = 0; return (dir, now, fn) => { if (!dir) d = 0; else if (dir !== d) { d = dir; at = last = now; fn(dir); } else if (now - last > (now - at > 450 ? 110 : 170)) { fn(dir); last = now; } }; };
 const repH = mkRep(), repV = mkRep();
@@ -1171,9 +1183,13 @@ function poll() {
   }
   if (launching) { edge('back', on('back'), back); return; }
   edge('ok', on('ok'), activate); edge('back', on('back'), back);
-  edge('remove', on('remove'), removeCurrent); edge('cover', on('cover'), changeCover); edge('scan', on('scan'), rescan);
-  edge('layout', on('layout'), () => setLayout(nextLayout()));
-  edge('upgrade', on('upgrade'), upgradeCovers);
+  // Hombros (L1 R1 L2 R2): esperan 180 ms antes de actuar; si en ese tiempo se aprieta otro, es la combinación de abrir/ocultar y no hacen nada
+  const shN = [4, 5, 6, 7].filter(b => gp.buttons[b]?.pressed).length;
+  if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
+  const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
+  edge('remove', on('remove'), removeCurrent); edge('cover', on('cover'), changeCover); edge('scan', on('scan'), sh(rescan));
+  edge('layout', on('layout'), sh(() => setLayout(nextLayout())));
+  edge('upgrade', on('upgrade'), sh(upgradeCovers));
   repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => step(d, 0));
   repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => step(0, d));
 }
