@@ -86,9 +86,12 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
 
 ## Tipo de fondo (Ajustes > Fondo)
 - **Fondo clásico**: las cintas de seda de siempre.
-- **Fondo original PS3**: recreación del fondo del XMB: degradado en diagonal, una ola fina de muchas hebras que se retuercen
-  y destellos que titilan. Morado en el diseño PS3 y azul en PS4/Centrado; también sigue el **Color del fondo** (color elegido o arcoíris).
-  Se dibuja a 2/3 de resolución y a 30 fps; las hebras solo se calculan cerca de la ola. Se detiene igual que el clásico.
+- **Fondo original PS3**: el **video original de la ola del XMB** (`assets/xmb-wave.mp4`, 1080p, 16 s en bucle, sin sonido), que viene
+  dentro del .exe (fuera del .asar, ver `asarUnpack` en `package.json`). Cada cuadro se sube a una textura y el shader lo **tiñe**:
+  con **Color del fondo: Original** se ve tal cual (azul); con un color elegido o **Arcoíris** se cambia solo el tono (HSV), así el
+  fondo toma el color y la ola sigue blanca. El video solo se reproduce mientras ese fondo se ve. Si no se puede leer, se usa la ola
+  dibujada por el shader (láminas translúcidas, como antes).
+  ⚠️ El video es material de Sony: queda incluido en el repositorio y en cada release (decisión del dueño del proyecto).
 - **Resolución automática del fondo** (clásico y PS3): si no llega a sus 30 fps durante ~2 s (GPU integrada, sin aceleración…) se dibuja más chico, hasta la mitad.
   Con WebGL por software arranca directamente al 60 %.
 - **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)

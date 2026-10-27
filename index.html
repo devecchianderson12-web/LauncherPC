@@ -360,6 +360,15 @@ setInterval(() => {
 const Wave = (() => {
   const cv = $('#wave');
   let gl = null, ctx2 = null, uR = null, uT = null, uP = null, uC = null, uK = null, uM = null, purple = 0, raf = 0, on = false, last = 0, ready = false;
+  // Video original del XMB (assets/xmb-wave.mp4) para el "Fondo original PS3": solo se reproduce mientras ese fondo se ve,
+  // y cada cuadro nuevo se sube a una textura que el shader tiñe. Si no carga, se usa la ola dibujada (xmb()).
+  const vid = document.createElement('video');
+  vid.muted = true; vid.loop = true; vid.playsInline = true; vid.preload = 'auto';
+  let vtex = null, vidOk = false, vLast = -1, uHV = null, uVR = null;
+  vid.addEventListener('loadeddata', () => { vidOk = true; syncVid(); });
+  vid.addEventListener('error', () => { vidOk = false; });
+  const vidWanted = () => on && xm && vidOk && !!gl;
+  const syncVid = () => { if (vidWanted()) { if (vid.paused) vid.play().catch(() => {}); } else if (!vid.paused) vid.pause(); };
   let xm = 0;                                   // 1 = "Fondo original PS3": hebras finas, se dibuja a algo más de resolución
   // Resolución automática: si el fondo no llega a sus 30 fps (GPU integrada, sin GPU…) se dibuja más chico hasta que llegue
   let dyn = 1, slow = 0;
@@ -372,6 +381,9 @@ uniform float P;
 uniform vec3 C;
 uniform float K;
 uniform float M;
+uniform sampler2D V;
+uniform float HV;
+uniform vec2 VR;
 float ribbon(vec2 p, float i) {
   float base = 0.24 + 0.07 * i + 0.09 * (p.x - 0.9);
   float y1 = base + 0.090 * sin(p.x * (1.25 + 0.20 * i) + T * (0.13 + 0.022 * i) + i * 2.1)
@@ -434,10 +446,34 @@ vec3 xmb(vec2 uv) {
   return col;
 }
 
+// Video original de la ola del XMB, ajustado a la pantalla como "cover" y teñido: se cambia solo el tono (HSV),
+// así el fondo azul pasa al color elegido (o al arcoíris) y la ola, que es casi blanca, sigue blanca.
+// Con "Original" (K = 0) se ve tal cual el video.
+vec3 rgb2hsv(vec3 c) {
+  vec4 k = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, k.wz), vec4(c.gb, k.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)), d / (q.x + 1e-10), q.x);
+}
+vec3 hsv2rgb(vec3 c) {
+  vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+vec3 xmbVideo(vec2 uv) {
+  float sa = R.x / R.y, va = VR.x / VR.y;
+  vec2 t = uv - 0.5;
+  if (sa > va) t.y *= va / sa; else t.x *= sa / va;
+  vec3 s = texture2D(V, t + 0.5).rgb;
+  if (K < 0.5) return s;
+  vec3 hs = rgb2hsv(s), tg = rgb2hsv(C);
+  // el azul del video tiene saturación ~0.80 y brillo ~0.87: se escalan para que el fondo quede del color pedido
+  return hsv2rgb(vec3(tg.x, clamp(hs.y * tg.y / 0.80, 0.0, 1.0), min(1.0, hs.z * max(tg.z, 0.25) / 0.87)));
+}
 void main() {
   vec2 uv = gl_FragCoord.xy / R;
   if (M > 0.5) {
-    vec3 c = xmb(uv) + (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+    vec3 c = (HV > 0.5 ? xmbVideo(uv) : xmb(uv)) + (hash(gl_FragCoord.xy) - 0.5) / 255.0;
     gl_FragColor = vec4(c, 1.0); return;
   }
   vec2 p = vec2(uv.x * R.x / R.y, uv.y);
@@ -470,6 +506,11 @@ void main() {
     const loc = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     uR = gl.getUniformLocation(pr, 'R'); uT = gl.getUniformLocation(pr, 'T'); uP = gl.getUniformLocation(pr, 'P');
     uC = gl.getUniformLocation(pr, 'C'); uK = gl.getUniformLocation(pr, 'K'); uM = gl.getUniformLocation(pr, 'M');
+    uHV = gl.getUniformLocation(pr, 'HV'); uVR = gl.getUniformLocation(pr, 'VR');
+    vtex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, vtex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+    gl.uniform1i(gl.getUniformLocation(pr, 'V'), 0);
     // Sin GPU real (WebGL por software: lo dibuja el procesador) se arranca directamente a menos resolución
     try { const d = gl.getExtension('WEBGL_debug_renderer_info'); if (d && /swiftshader|basic render|llvmpipe|software/i.test(gl.getParameter(d.UNMASKED_RENDERER_WEBGL))) dyn = .6; } catch {}
     return true;
@@ -518,6 +559,15 @@ void main() {
     if (gl) {
       const c = Tint.color();
       gl.uniform3f(uC, c[0], c[1], c[2]); gl.uniform1f(uK, Tint.active() ? 1 : 0);
+      let hv = 0;
+      if (xm && vidOk && vid.readyState >= 2) {
+        if (vid.currentTime !== vLast) {                  // solo se sube a la GPU cuando el video tiene un cuadro nuevo
+          vLast = vid.currentTime;
+          try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, vid); } catch { vidOk = false; }
+        }
+        if (vidOk) { hv = 1; gl.uniform2f(uVR, vid.videoWidth || 1920, vid.videoHeight || 1080); }
+      }
+      gl.uniform1f(uHV, hv);
       gl.uniform1f(uT, T); gl.uniform1f(uP, purple); gl.uniform1f(uM, xm); gl.drawArrays(gl.TRIANGLES, 0, 3);
     } else draw2d(T);
   }
@@ -525,17 +575,18 @@ void main() {
     set(v) {
       if (v === on) return;
       on = v;
-      if (!v) { cancelAnimationFrame(raf); return; }
+      if (!v) { cancelAnimationFrame(raf); syncVid(); return; }
       if (!ready) { ready = true; if (!initGL()) ctx2 = cv.getContext('2d'); }
-      size(); last = 0; raf = requestAnimationFrame(frame);
+      size(); last = 0; raf = requestAnimationFrame(frame); syncVid();
     },
     size, theme(v) { purple = v; },
-    style(v) { xm = v ? 1 : 0; size(); if (on) { last = 0; } },
+    style(v) { xm = v ? 1 : 0; size(); if (on) { last = 0; } syncVid(); },
+    video(url) { if (url && vid.getAttribute('src') !== url) { vidOk = false; vLast = -1; vid.src = url; } },
     // Para la tecla F: qué dibuja el fondo (GPU real o software) y a qué resolución
     info() {
       let r = gl ? 'WebGL' : ctx2 ? 'canvas 2D' : 'sin iniciar';
       try { const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); if (d) r = gl.getParameter(d.UNMASKED_RENDERER_WEBGL).replace(/^ANGLE \(|\)$/g, '').replace(/\s*\(0x[0-9a-f]+\)/i, '').slice(0, 70); } catch {}
-      return `  ·  fondo: ${r} · ${cv.width}x${cv.height}${dyn < 1 ? ' (auto ' + Math.round(dyn * 100) + '%)' : ''}`;
+      return `  ·  fondo: ${r}${xm && vidOk ? ' · video XMB' : ''} · ${cv.width}x${cv.height}${dyn < 1 ? ' (auto ' + Math.round(dyn * 100) + '%)' : ''}`;
     }
   };
 })();
@@ -1783,6 +1834,7 @@ window.api.onResume(() => {
   $('#spd').value = Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30;
   syncColorUI();
   setArtBlur(Number.isFinite(c.artBlur) ? c.artBlur : 55, false);
+  Wave.video(c.xmbVideo);
   bgVideoUrl = c.bgVideo || ''; setBgType(c.bgType || 'classic', false);
   setBtnStyle(c.btnStyle || 'min', false);
   setBg(c.bg !== false, false);

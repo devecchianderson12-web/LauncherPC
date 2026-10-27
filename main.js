@@ -1152,6 +1152,12 @@ ipcMain.handle('pickApply', (e, id, file) => {
 // ---------- Video de fondo ----------
 // Se elige en dos pasos para que la interfaz pueda avisar "Copiando…": el archivo se copia a la carpeta de datos
 // (sigue funcionando aunque muevas o borres el original). Solo se copia la ruta que salió del diálogo, nunca una que mande la interfaz.
+// Video de la ola del XMB que viene con el launcher (assets/xmb-wave.mp4). En el .exe va fuera del .asar
+// (package.json → asarUnpack): Chromium lo lee directo del disco, sin pasar por el archivo empaquetado.
+function xmbVideoUrl() {
+  const f = path.join(__dirname, 'assets', 'xmb-wave.mp4').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+  return fs.existsSync(f) ? fileUrl(f) : '';
+}
 const vidDir = () => path.join(userDir(), 'bgvideo');
 const VID_EXT = ['mp4', 'webm', 'mkv', 'mov', 'm4v'];
 let pendingVideo = null;
@@ -1181,7 +1187,7 @@ ipcMain.handle('useVideo', async () => {
   } catch (e) { return { error: 'No se pudo copiar el video (¿falta espacio?)' }; }
 });
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
   if (patch.layout === 'ps4' || patch.layout === 'center' || patch.layout === 'ps3') cfg.layout = patch.layout;
