@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   removeFolder: p => ipcRenderer.invoke('removeFolder', p),
   remove: id => ipcRenderer.invoke('remove', id),
   setCover: id => ipcRenderer.invoke('setCover', id),
-  hdScan: () => ipcRenderer.invoke('hdScan'),
+  hdInfo: id => ipcRenderer.invoke('hdInfo', id),
   hdOptions: id => ipcRenderer.invoke('hdOptions', id),
   hdApply: (id, i) => ipcRenderer.invoke('hdApply', id, i),
   hdDone: () => ipcRenderer.invoke('hdDone'),

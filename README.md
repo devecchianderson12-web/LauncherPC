@@ -4,7 +4,7 @@ Launcher estilo PS4 para Windows. Detecta juegos de Steam (todas las bibliotecas
 y permite añadir cualquier .exe con portada automática.
 
 - `npm install` y `npm start` para probar. `npm run dist` genera **`dist/PS-Launcher.exe`**: un único .exe portable, sin instalador. Cópialo donde quieras y ábrelo.
-- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, **S (buscar juegos nuevos)**, C (portada), P (portadas en HD), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
+- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, **S (buscar juegos nuevos)**, C (portada), P (portada en HD), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
 - **Mando (Xbox, PlayStation, Nintendo y cualquier mando estándar)**: se detecta solo y la ayuda de arriba muestra los botones del último
   dispositivo que uses (✕ ○ □ △ / L1 R1 en PlayStation, A B X Y / LB RB en Xbox, A B X Y / L R en Nintendo, donde A es el botón derecho).
   Aceptar jugar, atrás cerrar, cuadrado/X quitar, triángulo/Y portada, L1/LB buscar juegos, R1/RB cambia de diseño; cruceta o stick izquierdo para moverte.
@@ -21,9 +21,13 @@ y permite añadir cualquier .exe con portada automática.
 
 ## Rendimiento (60 fps)
 - Antes se forzaba la GPU dedicada; en portátiles con dos GPU eso puede dejar la interfaz a ~20 fps. Ahora arranca con los valores por defecto
-  y **la primera vez el launcher mide sus fps** moviendo la selección ~3 s ("Optimizando gráficos…"). Si no llega a ~52 fps prueba solo otro modo
-  (integrada, OpenGL, sin GPU, dedicada), se reinicia y se queda con el mejor. El resultado se guarda en `config.json` (`gpuMode`, `tune`).
-- **Ajustes > Gráficos > Optimizar** repite la prueba (por ejemplo, tras cambiar de GPU o de drivers).
+  y **la primera vez el launcher mide sus fps** moviendo la selección ~3 s ("Optimizando gráficos…"). Si no llega a ~85 % de la frecuencia
+  del monitor (tope 52 fps) prueba solo otro modo (integrada, OpenGL, dedicada), se reinicia y se queda con el mejor. El resultado se guarda
+  en `config.json` (`gpuMode`, `tune`).
+- **"soft" (sin GPU) es el último recurso**: solo se elige si ningún modo con GPU llega a 20 fps. Sin GPU el contador de fps no está atado
+  al monitor y da números altísimos, así que antes podía "ganarle" a la GPU y dejar todo borroso y lento. La 1.10.0 vuelve a probar una vez
+  a quien había quedado en "soft".
+- **Ajustes > Gráficos > Optimizar** repite la prueba (por ejemplo, tras cambiar de GPU o de drivers). Arranca siempre por el modo normal.
 - El fondo se dibuja con un shader a baja resolución y 30 fps, y se detiene con el fondo de portada, esperando un juego, con el launcher oculto o pausado.
 
 ## Biblioteca guardada
@@ -82,7 +86,7 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
 - **Fondo clásico**: las cintas de seda de siempre.
 - **Fondo original PS3**: recreación del fondo del XMB: degradado en diagonal, una ola fina de muchas hebras que se retuercen
   y destellos que titilan. Morado en el diseño PS3 y azul en PS4/Centrado; también sigue el **Color del fondo** (color elegido o arcoíris).
-  Se dibuja a 50 % de resolución y a 30 fps; las hebras solo se calculan cerca de la ola. Se detiene igual que el clásico.
+  Se dibuja a 2/3 de resolución y a 30 fps; las hebras solo se calculan cerca de la ola. Se detiene igual que el clásico.
 - **Resolución automática del fondo** (clásico y PS3): si no llega a sus 30 fps durante ~2 s (GPU integrada, sin aceleración…) se dibuja más chico, hasta la mitad.
   Con WebGL por software arranca directamente al 60 %.
 - **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)
@@ -96,17 +100,22 @@ La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ �
 - **Colores**: como el mando detectado. Xbox con A verde, B roja, X azul, Y amarilla; PlayStation con los símbolos de color sobre negro;
   Nintendo y genéricos en oscuro; las teclas en claro.
 
-## Portadas en HD (tecla P / LT · L2 · ZL)
-Revisa todas las portadas y, las que están **por debajo de 1280x720** (lado largo menor a 1280 o corto menor a 720), las va mostrando
-de a una con **hasta 3 opciones de internet que sí superan 1280x720**. Vos elegís cuál aplicar:
-- **Aceptar / Enter / clic**: aplica la marcada · **1, 2, 3**: aplica esa opción directamente.
-- **Atrás / Retroceso / clic derecho**: omite ese juego · **△/Y / Esc**: termina.
-- Mientras elegís, ya se buscan las opciones del juego siguiente. Si un juego no tiene ninguna, se avisa y se pasa solo al siguiente.
-- Fuentes: arte principal de Steam en grande (3840x1240), SteamGridDB (si hay clave en Ajustes) y capturas de Steam (1920x1080).
-  Los juegos que no son de Steam se buscan por nombre en la tienda. Ojo: **las portadas verticales de Steam/SteamGridDB llegan como mucho a 600x900**,
-  así que las opciones HD son arte apaisado o capturas. Se comprueba el tamaño real de cada imagen descargada.
+## Portada en HD (tecla P / LT · L2 · ZL)
+Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 3 imágenes
+que superan 1280x720**, con su resolución y de dónde salen. Solo busca para ese juego.
+- **Aceptar / Enter / clic**: aplica la marcada · **1, 2, 3**: esa opción directo · **Atrás / Esc / clic derecho / clic fuera**: cierra.
+- Si no hay ninguna, aceptar abre el explorador de portadas (**buscar en mi PC**).
+- Fuentes: arte principal de Steam en grande (3840x1240), SteamGridDB (si hay clave en Ajustes), capturas de Steam (1920x1080)
+  e **imágenes grandes de la propia carpeta del juego** (primero las que se llaman cover, portada, poster, banner…).
+  Ojo: **las portadas verticales de Steam/SteamGridDB llegan como mucho a 600x900**, así que las opciones HD son arte apaisado o capturas.
+  Se comprueba el tamaño real de cada imagen.
+- **Juegos sueltos** (portables, instalados a mano, carpetas importadas): para buscarlos se usa el nombre de producto guardado en el .exe
+  ("PES2021.exe" → "eFootball PES 2021") y los nombres del .exe y sus carpetas limpios (sin "Play", "Launcher", "SteamRIP.com", versiones…),
+  con búsqueda aproximada en Steam ("III" = 3, los números tienen que coincidir). Lo mismo vale para las portadas normales.
+  Los juegos que **no están o ya no están en Steam** (God of War III, PES 2021 retirado de la tienda…) solo aparecen en **SteamGridDB**:
+  hace falta una clave gratis (steamgriddb.com → Preferences → API, y pegarla en Ajustes).
 - El original HD se guarda en `covers\hd\` y la baldosa usa una copia de hasta 1000x1500 (más liviana para la GPU).
-  Si elegís una imagen HD propia con **C**, también se guarda así y ya no aparece como baja.
+  Si elegís una imagen HD propia con **C**, también se guarda así.
 ## Ajustes
 - Diseño PS4 / Centrado.
 - **Iniciar con Windows Sí/No**: registra el .exe actual en el inicio de Windows (se vuelve a registrar solo si lo mueves de carpeta).

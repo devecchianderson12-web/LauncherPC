@@ -209,15 +209,21 @@
   #pk-empty { grid-column: 1 / -1; font-size: calc(var(--u) * 26); opacity: .6; padding: calc(var(--u) * 40) 0; text-align: center; }
   #pk-foot { display: flex; gap: calc(var(--u) * 30); font-size: calc(var(--u) * 21); opacity: .8; flex-wrap: wrap; }
   #pk-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); }
-  /* Portadas en HD: 3 opciones grandes por juego; se elige una o se omite */
-  #hdpick { position: fixed; inset: 0; z-index: 13; background: rgba(2,8,42,.97); display: flex; flex-direction: column; gap: calc(var(--u) * 26);
-    padding: calc(var(--u) * 50) calc(var(--u) * 90) calc(var(--u) * 34); opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
+  /* Portada en HD: ventana mediana con bordes redondeados sobre el launcher (oscurecido), solo para el juego elegido */
+  #hdpick { position: fixed; inset: 0; z-index: 13; background: rgba(0,4,24,.55); display: flex; align-items: center; justify-content: center;
+    opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
   #hdpick.open { opacity: 1; visibility: visible; transition: opacity .2s; }
-  #hd-title { font-size: calc(var(--u) * 42); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hd-box { width: calc(var(--u) * 1240); max-width: 90vw; height: calc(var(--u) * 700); max-height: 86vh; display: flex; flex-direction: column;
+    gap: calc(var(--u) * 22); padding: calc(var(--u) * 36) calc(var(--u) * 44) calc(var(--u) * 28); border-radius: calc(var(--u) * 28);
+    background: rgba(12,30,92,.97); border: calc(var(--u) * 1.5) solid rgba(255,255,255,.18); box-shadow: 0 calc(var(--u) * 30) calc(var(--u) * 90) rgba(0,0,0,.55);
+    transform: scale(.96); transition: transform .2s ease-out; }
+  #hdpick.open .hd-box { transform: none; }
+  #hd-msg small { display: block; font-size: .7em; opacity: .75; margin-top: calc(var(--u) * 14); }
+  #hd-title { font-size: calc(var(--u) * 34); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hd-sub { font-size: calc(var(--u) * 22); opacity: .65; margin-top: calc(var(--u) * 6); }
-  #hd-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 40); align-items: stretch; }
+  #hd-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 28); align-items: stretch; }
   .hd-c { display: flex; flex-direction: column; gap: calc(var(--u) * 12); min-height: 0; cursor: pointer; transition: transform .15s ease-out; }
-  .hd-i { flex: 1; min-height: 0; background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center;
+  .hd-i { flex: 1; min-height: 0; border-radius: calc(var(--u) * 14); overflow: hidden; background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center;
     outline: calc(var(--u) * 4) solid transparent; outline-offset: calc(var(--u) * 5); transition: outline-color .12s; }
   .hd-i img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .hd-l { font-size: calc(var(--u) * 22); text-align: center; opacity: .8; }
@@ -263,11 +269,11 @@
   <div id="pk-grid"></div>
   <div id="pk-foot"></div>
 </div>
-<div id="hdpick">
+<div id="hdpick"><div class="hd-box">
   <div><div id="hd-title"></div><div id="hd-sub"></div></div>
   <div id="hd-cards"></div>
   <div id="hd-foot"></div>
-</div>
+</div></div>
 <div id="padwiz"><div id="pw-t"></div><small id="pw-s"></small><div class="btns"><button class="btn" id="pw-skip">Omitir</button><button class="btn" id="pw-cancel">Cancelar</button></div></div>
 <div id="upd"><b id="upd-t"></b><span id="upd-s">Se cerrará y se abrirá la versión nueva</span>
   <div class="btns"><button class="btn on" id="upd-go">Actualizar</button><button class="btn" id="upd-no">Ahora no</button></div>
@@ -357,7 +363,7 @@ const Wave = (() => {
   let xm = 0;                                   // 1 = "Fondo original PS3": hebras finas, se dibuja a algo más de resolución
   // Resolución automática: si el fondo no llega a sus 30 fps (GPU integrada, sin GPU…) se dibuja más chico hasta que llegue
   let dyn = 1, slow = 0;
-  const scale = () => (xm ? .5 : .4) * dyn;
+  const scale = () => (xm ? .67 : .4) * dyn;      // PS3: hebras finas, a 2/3 de resolución se ven nítidas (el shader es liviano)
   const t0 = performance.now();
   const FS = `precision highp float;
 uniform vec2 R;
@@ -1064,75 +1070,72 @@ function pkHint() {
   const parts = [[L.ok, 'elegir / abrir'], [L.back, 'carpeta de arriba'], [L.cover, 'cerrar'], [L.scan, 'página arriba'], [L.layout, 'página abajo']];
   $('#pk-foot').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('') + (gp ? '' : '<span class="hk">Clic derecho: atrás</span>');
 }
-// ---------- Portadas en HD (tecla P / gatillo izquierdo) ----------
-// Recorre los juegos cuya portada no llega a 1280x720 y, para cada uno, muestra hasta 3 opciones de internet que sí llegan.
-// Aceptar aplica la marcada · atrás la omite · △/Y o Esc termina. Mientras eliges, ya se buscan las del juego siguiente.
+// ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
+// Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 3 opciones de internet (o de su carpeta)
+// que superan 1280x720. Aceptar aplica la marcada · atrás / △ / Esc cierra. Sin resultados ofrece buscar en el PC.
 const hdEl = $('#hdpick'), hdCards = $('#hd-cards');
 const hdOpen = () => hdEl.classList.contains('open');
 let hd = null;
 async function upgradeCovers() {
-  if (hd || pickerOpen()) return;
-  toast('Revisando portadas…', 30000);
-  const low = await window.api.hdScan();
-  if (!low.length) { toast('Todas las portadas ya están en 1280x720 o más'); return; }
-  toast(`${low.length} ${low.length === 1 ? 'portada' : 'portadas'} por debajo de 1280x720`);
-  hd = { list: low, k: -1, opts: [], f: 0, done: 0, seq: 0 };
-  hideArt(); hdEl.classList.add('open'); hdHint();
-  hdNext();
-}
-function hdNext() {
-  if (!hd || hd.busy) return;                                  // aplicando una: se espera a que termine
-  if (++hd.k >= hd.list.length) { hdClose(); return; }
-  const g = hd.list[hd.k], seq = ++hd.seq;
-  $('#hd-title').textContent = g.name;
-  $('#hd-sub').textContent = `${hd.k + 1} de ${hd.list.length} · portada actual: ${g.res}`;
-  hd.opts = []; hd.f = 0;
+  const it = items[sel];
+  if (hd || pickerOpen() || !it || it.type === 'add' || it.type === 'cfg') return;
+  const info = await window.api.hdInfo(it.id);
+  if (!info) return;
+  hd = { it, info, opts: [], f: 0, seq: 1, busy: false, none: false };
+  $('#hd-title').textContent = it.name;
+  $('#hd-sub').textContent = `Portada actual: ${info.res}` + (info.hd ? ' · ya está en HD, podés cambiarla igual' : '');
   hdCards.innerHTML = '<div id="hd-msg">Buscando portadas de 1280x720 o más…</div>';
-  window.api.hdOptions(g.id).then(opts => {
-    if (!hd || seq !== hd.seq) return;
-    hd.opts = opts.filter(o => o.preview);
-    if (!hd.opts.length) { hdCards.innerHTML = '<div id="hd-msg">No encontré portadas de 1280x720 o más para este juego.<br>Se pasa al siguiente…</div>'; setTimeout(() => { if (hd && seq === hd.seq) hdNext(); }, 1800); return; }
-    hdCards.innerHTML = '';
-    hd.opts.forEach((o, i) => {
-      const c = document.createElement('div'); c.className = 'hd-c';
-      c.innerHTML = `<div class="hd-i"><img alt=""></div><div class="hd-l">${o.w}x${o.h} · ${o.src}</div>`;
-      c.querySelector('img').src = o.preview;
-      c.onclick = () => { hd.f = i; hdChoose(); };
-      c.onmousemove = () => { if (hd && hd.f !== i) { hd.f = i; hdMark(); } };
-      hdCards.appendChild(c);
-    });
-    hdMark();
+  hideArt(); hdEl.classList.add('open'); hdHint();
+  const seq = hd.seq, opts = await window.api.hdOptions(it.id);
+  if (!hd || hd.seq !== seq) return;
+  hd.opts = opts.filter(o => o.preview);
+  if (!hd.opts.length) {
+    hd.none = true; hdHint();
+    hdCards.innerHTML = '<div id="hd-msg">No encontré imágenes de 1280x720 o más para este juego.' +
+      (info.key ? '' : '<small>Con una clave gratis de SteamGridDB (Ajustes) se buscan también juegos que no están en Steam.</small>') + '</div>';
+    return;
+  }
+  hdCards.innerHTML = '';
+  hd.opts.forEach((o, i) => {
+    const c = document.createElement('div'); c.className = 'hd-c';
+    c.innerHTML = `<div class="hd-i"><img alt=""></div><div class="hd-l">${o.w}x${o.h} · ${o.src}</div>`;
+    c.querySelector('img').src = o.preview;
+    c.onclick = () => { hd.f = i; hdChoose(); };
+    c.onmousemove = () => { if (hd && hd.f !== i) { hd.f = i; hdMark(); } };
+    hdCards.appendChild(c);
   });
-  const nx = hd.list[hd.k + 1]; if (nx) window.api.hdOptions(nx.id);           // se adelanta la búsqueda del siguiente
+  hdMark();
 }
 function hdMark() { [...hdCards.children].forEach((c, i) => c.classList.toggle('f', i === hd.f)); }
 function hdMove(d) { if (hd && hd.opts.length) { hd.f = Math.max(0, Math.min(hd.opts.length - 1, hd.f + d)); hdMark(); } }
 async function hdChoose() {
-  if (!hd || !hd.opts.length || hd.busy) return;
-  const g = hd.list[hd.k], o = hd.opts[hd.f];
+  if (!hd || hd.busy) return;
+  if (hd.none) { const it = hd.it; hdClose(); go(items.indexOf(it)); changeCover(); return; }   // sin resultados: aceptar = buscar en el PC
+  if (!hd.opts.length) return;
+  const it = hd.it, o = hd.opts[hd.f];
   hd.busy = true;
-  const url = await window.api.hdApply(g.id, o.i);
+  const url = await window.api.hdApply(it.id, o.i);
   if (!hd) return;
-  hd.busy = false;
-  const it = items.find(x => x.id === g.id);
-  if (url && it) { setCoverUrl(it, url); hd.done++; } else if (!url) toast('No se pudo aplicar esa portada');
-  hdNext();
+  hdClose(true);
+  if (url) { setCoverUrl(it, url); toast('Portada en HD aplicada'); } else toast('No se pudo aplicar esa portada');
 }
-function hdClose() {
+function hdClose(quiet) {
   if (!hd) return;
-  const n = hd.done; hd = null;
-  hdEl.classList.remove('open'); hdCards.innerHTML = '';
+  hd = null;
+  hdEl.classList.remove('open');
+  setTimeout(() => { if (!hd) hdCards.innerHTML = ''; }, 250);
   window.api.hdDone();
-  toast(n ? `${n} ${n === 1 ? 'portada cambiada' : 'portadas cambiadas'} a HD` : 'Sin cambios');
   armArt();
 }
 function hdHint() {
-  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Retroceso', cover: 'Esc' };
-  $('#hd-foot').innerHTML = [[L.ok, 'aplicar', 'ok'], [L.back, 'omitir este juego', 'skip'], [L.cover, 'terminar', 'end']]
-    .map(([b, t, a]) => `<span class="hk" data-a="${a}">${glyph(b, k)}${t}</span>`).join('') + '<span class="hk">← → elegir</span>';
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc' };
+  const okTxt = hd && hd.none ? 'buscar en mi PC' : 'aplicar';
+  $('#hd-foot').innerHTML = `<span class="hk" data-a="ok">${glyph(L.ok, k)}${okTxt}</span><span class="hk" data-a="end">${glyph(L.back, k)}cerrar</span>` +
+    (hd && hd.none ? '' : '<span class="hk">← → elegir</span>');
 }
-$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'skip') hdNext(); else if (a === 'end') hdClose(); });
-hdEl.addEventListener('contextmenu', e => { e.preventDefault(); hdNext(); });   // clic derecho = omitir
+$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'end') hdClose(); });
+hdEl.addEventListener('click', e => { if (e.target === hdEl) hdClose(); });            // clic fuera de la ventana = cerrar
+hdEl.addEventListener('contextmenu', e => { e.preventDefault(); hdClose(); });
 async function removeCurrent() {
   const it = items[sel];
   if (it?.type !== 'custom') return;
@@ -1439,7 +1442,7 @@ addEventListener('keydown', e => {
     if (k === 'ArrowRight' || k === 'ArrowDown') hdMove(1);
     else if (k === 'ArrowLeft' || k === 'ArrowUp') hdMove(-1);
     else if (k === 'Enter') hdChoose();
-    else if (k === 'Backspace') hdNext();
+    else if (k === 'Backspace') hdClose();
     else if (k === 'Escape') hdClose();
     else if (k >= '1' && k <= '3') { hdMove(+k - 1 - (hd?.f || 0)); hdChoose(); }
     e.preventDefault();
@@ -1598,7 +1601,7 @@ function poll() {
   if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
   const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
   if (hdOpen()) {
-    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdNext); edge('cover', on('cover'), hdClose);
+    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose);
     repH(on('right') ? 1 : on('left') ? -1 : 0, now, hdMove);
     return;
   }

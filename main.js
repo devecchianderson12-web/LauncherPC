@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, shell, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -13,23 +13,39 @@ const { parseLhm } = require('./lhm');
 // Forzar la GPU dedicada (lo que había antes) en portátiles con dos GPU suele dar ~20 fps: cada fotograma se copia de una GPU a otra.
 // Ahora arranca con los valores por defecto de Chromium y, la primera vez, el launcher MIDE sus fps y prueba otros modos
 // (integrada, OpenGL, sin GPU, dedicada) hasta quedarse con el que da 60 fps. El modo elegido se guarda en config.json.
+// "soft" (sin GPU) va último y solo se elige si ningún modo con GPU funciona: sin GPU el contador de fps no está atado a la
+// frecuencia del monitor y da números altísimos (100+) aunque se vea peor, así que no se puede comparar con los demás.
 const GPU_MODES = [
   { id: 'auto' },                                         // valores por defecto de Chromium
   { id: 'low',  sw: ['force_low_power_gpu'] },            // GPU integrada
   { id: 'gl',   sw: ['use-angle', 'gl'] },                // ANGLE sobre OpenGL
-  { id: 'soft', soft: true },                             // sin aceleración por GPU
-  { id: 'high', sw: ['force_high_performance_gpu'] }      // GPU dedicada
+  { id: 'high', sw: ['force_high_performance_gpu'] },     // GPU dedicada
+  { id: 'soft', soft: true }                              // sin aceleración por GPU (último recurso)
 ];
+// El mejor modo probado: el de más fps entre los que usan GPU (con al menos 20 fps); "soft" solo si ninguno sirve
+function bestMode(tried) {
+  const gpu = Object.entries(tried).filter(([m, f]) => m !== 'soft' && f >= 20).sort((a, b) => b[1] - a[1]);
+  return gpu.length ? gpu[0][0] : ('soft' in tried && tried.soft > 0 ? 'soft' : 'auto');
+}
 const earlyCfgFile = path.join(app.getPath('userData'), 'config.json');
 let early = {};
 try { early = JSON.parse(fs.readFileSync(earlyCfgFile, 'utf8')); } catch {}
 (function pickGpuMode() {
   const t = early.tune = early.tune || { done: false, tried: {} };
+  // Versiones anteriores podían quedarse en "soft" por error (comparaban sus fps sin límite con los de la GPU, y
+  // "Optimizar" daba por fallado el modo 'auto' sin probarlo): se vuelve a probar una vez con la regla nueva.
+  // Si la GPU de verdad no funciona, la prueba vuelve a terminar en "soft" sola.
+  if (early.tuneVer !== 2) {
+    if (early.gpuMode === 'soft') { early.gpuMode = 'auto'; early.tune = { done: false, tried: {} }; }
+    early.tuneVer = 2;
+    try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
+  }
+  const tt = early.tune;
   let id = GPU_MODES.some(m => m.id === early.gpuMode) ? early.gpuMode : 'auto';
-  if (t.pending) {          // el arranque anterior con este modo no llegó a cargar la interfaz: se descarta y se pasa al siguiente
-    t.tried[id] = 0; t.pending = false;
-    const next = GPU_MODES.find(m => !(m.id in t.tried));
-    if (next) id = next.id; else { id = Object.entries(t.tried).sort((a, b) => b[1] - a[1])[0][0]; t.done = true; }
+  if (tt.pending) {         // el arranque anterior con este modo no llegó a cargar la interfaz: se descarta y se pasa al siguiente
+    tt.tried[id] = 0; tt.pending = false;
+    const next = GPU_MODES.find(m => !(m.id in tt.tried));
+    if (next) id = next.id; else { id = bestMode(tt.tried); tt.done = true; }
     early.gpuMode = id;
     try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
   }
@@ -241,6 +257,75 @@ async function download(url, headers = {}) {
   return Buffer.from(await r.arrayBuffer());
 }
 
+// ---------- Nombre real de un juego suelto (portable, instalado a mano, carpeta importada) ----------
+// El nombre del .exe muchas veces no sirve para buscar ("PES2021", "ReSkateLauncher", "Play God of War III").
+// Se prueban, en orden: el nombre de producto guardado en el .exe, el del .exe limpio y los de sus carpetas limpios.
+const exeProductCache = new Map();
+function exeProduct(exe) {
+  if (!exe || process.platform !== 'win32') return Promise.resolve('');
+  const c = cfg.custom.find(x => norm(x.exe) === norm(exe));
+  if (c && typeof c.product === 'string') return Promise.resolve(c.product);       // ya se leyó otra vez: queda en config.json
+  if (exeProductCache.has(exe)) return exeProductCache.get(exe);
+  const p = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    `$v=(Get-Item -LiteralPath '${exe.replace(/'/g, "''")}').VersionInfo; if ($v.ProductName) { $v.ProductName } else { $v.FileDescription }`], 8000)
+    .then(o => {
+      const s = String(o || '').trim().split(/\r?\n/)[0].trim().slice(0, 80);
+      const ok = s && !/^(launcher|game|application|unity|unreal|electron|bootstrap)/i.test(s) ? s : '';
+      if (c) { c.product = ok; saveCfg(); }
+      return ok;
+    });
+  exeProductCache.set(exe, p);
+  return p;
+}
+// "eFootball-PES-2021-SteamRIP.com" → "eFootball PES 2021"; "ReSkateLauncher" → "ReSkate"; "gow3-windows" → "gow 3"
+// (no se separan minúscula-mayúscula: rompería nombres como "eFootball")
+function cleanName(s) {
+  return String(s || '').replace(/\.(exe|lnk|bat)$/i, '').replace(/(?<=[a-z])(Launcher|Game|Win64|Shipping)$/, '')
+    .replace(/[\[(][^\])]*[\])]/g, ' ')                                              // [FitGirl Repack], (x64)…
+    .replace(/[-_. ]*(steam\s?rip(\.com)?|fitgirl|dodi|repack|gog|elamigos|codex|plaza|empress|skidrow|rune|tenoke)\b.*$/i, '')
+    .replace(/[_.\-+]+/g, ' ')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2').replace(/(\d)([A-Za-z])/g, '$1 $2')
+    .replace(/\b(v?\d+(\s\d+){1,3}|x64|x86|win(dows)?\s?\d*|64\s?bit|32\s?bit|launcher|play|portable|setup|build|update|com)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+const GENERIC_DIR = /^(juegos?|games?|gaming|program ?files( \(x86\))?|programas|steam ?library|steamapps|common|desktop|escritorio|downloads?|descargas|documents|documentos|bin|binaries|win(32|64)|x64|x86|apps?|portable|[a-z])$/i;
+async function gameNames(g) {
+  const out = [], add = s => { s = String(s || '').trim(); if (s.length >= 3 && !GENERIC_DIR.test(s) && !out.some(x => nkey(x) === nkey(s))) out.push(s); };
+  if (g.exe) add(await exeProduct(g.exe).catch(() => ''));
+  add(cleanName(g.name));
+  if (g.exe) { const d = path.dirname(g.exe); add(cleanName(path.basename(d))); add(cleanName(path.basename(path.dirname(d)))); }
+  add(g.name);
+  return out.slice(0, 4);
+}
+// Parecido entre lo buscado y un título: palabras en común, y los números tienen que coincidir ("III" cuenta como 3)
+const ROMAN = { i: '1', ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10' };
+const toks = s => String(s).toLowerCase().replace(/[™®©:]/g, ' ').split(/[^a-z0-9]+/).filter(Boolean).map(w => ROMAN[w] || w);
+function nameScore(query, title) {
+  const q = toks(query), t = new Set(toks(title));
+  if (!q.length) return 0;
+  if (q.filter(w => /^\d+$/.test(w)).some(n => !t.has(n))) return 0;                // "PES 2021" no es "PES 2020"
+  let hit = q.filter(w => t.has(w)).length / q.length;
+  if (nkey(title).includes(nkey(query))) hit = Math.max(hit, .9);
+  return hit - Math.max(0, t.size - q.length) * .03;                                 // a igualdad, el título más corto
+}
+const steamFindCache = new Map();
+async function steamFind(g) {
+  const key = g.id || g.name;
+  if (steamFindCache.has(key)) return steamFindCache.get(key);
+  const p = (async () => {
+    for (const q of await gameNames(g)) {
+      try {
+        const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(q), { signal: AbortSignal.timeout(6000) })).json();
+        const best = (r.items || []).filter(x => x.type === 'app').map(x => ({ id: x.id, s: nameScore(q, x.name) })).sort((a, b) => b.s - a.s)[0];
+        if (best && best.s >= .6) return best.id;
+      } catch {}
+    }
+    return null;
+  })();
+  steamFindCache.set(key, p);
+  return p;
+}
+
 // Con appid (juegos de Steam) se busca directamente por su id de Steam; si no, por nombre
 async function steamGridCover(name, appid) {
   if (!cfg.apiKey) return null;
@@ -256,12 +341,11 @@ async function steamGridCover(name, appid) {
   return url ? download(url) : null;
 }
 
-// Tienda de Steam (sin clave): solo se acepta si el nombre coincide exactamente, para no poner portadas equivocadas
-async function steamStoreCover(name, names = ['library_600x900.jpg', 'header.jpg']) {
-  const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(name), { signal: AbortSignal.timeout(6000) })).json();
-  const hit = (r.items || []).find(x => x.type === 'app' && nkey(x.name) === nkey(name));
-  if (!hit) return null;
-  const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${hit.id}/`;
+// Tienda de Steam (sin clave): con los nombres posibles del juego y solo si el título se parece de verdad (steamFind)
+async function steamStoreCover(g, names = ['library_600x900.jpg', 'header.jpg']) {
+  const id = await steamFind(g);
+  if (!id) return null;
+  const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/`;
   for (const n of names) { try { return await download(base + n); } catch {} }
   return null;
 }
@@ -306,8 +390,8 @@ async function fetchCover(item, f) {
         }
       }
       if (!buf && item.type === 'custom' && item.exe) buf = localCover(item.exe);
-      if (!buf) { try { buf = await steamGridCover(item.name); } catch {} }
-      if (!buf && item.type === 'custom') { try { buf = await steamStoreCover(item.name); } catch {} }
+      if (!buf) { try { buf = await steamGridCover(item.type === 'custom' ? (await gameNames(item))[0] || item.name : item.name); } catch {} }
+      if (!buf && item.type === 'custom') { try { buf = await steamStoreCover(item); } catch {} }
       if (!buf && item.exe) {
         const icon = await app.getFileIcon(item.exe, { size: 'large' });
         if (!icon.isEmpty()) buf = icon.toPNG();
@@ -340,12 +424,26 @@ function coverRes(id) {
   for (const f of [hdFile(id), coverFile(id)]) { try { const s = imgSize(fs.readFileSync(f)); if (s) return s; } catch {} }
   return null;
 }
-// appid de Steam: el propio si es de Steam; si no, se busca por nombre en la tienda (exacto, o el primero que contenga el nombre)
+// appid de Steam: el propio si es de Steam; si no, se busca con los nombres posibles del juego (ver gameNames)
 async function steamAppFor(g) {
-  if (g.type === 'steam') return g.appid;
-  const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(g.name), { signal: AbortSignal.timeout(6000) })).json();
-  const apps = (r.items || []).filter(x => x.type === 'app'), k = nkey(g.name);
-  return (apps.find(x => nkey(x.name) === k) || apps.find(x => nkey(x.name).includes(k) || k.includes(nkey(x.name))))?.id || null;
+  return g.type === 'steam' ? g.appid : steamFind(g);
+}
+// Imágenes de la carpeta del juego que podrían servir de portada: primero las que se llaman cover/portada/poster/…
+// y después las más pesadas (las chicas son iconos o texturas). Se descartan las de más de 30 MB.
+async function localImages(dir) {
+  if (!dir) return [];
+  const found = [];
+  const walk = async (d, depth) => {
+    let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      if (found.length > 200) return;
+      const f = path.join(d, e.name);
+      if (e.isFile() && /\.(jpe?g|png|webp)$/i.test(e.name)) { try { const st = await fs.promises.stat(f); if (st.size > 150e3 && st.size < 30e6) found.push({ f, size: st.size, named: /cover|portada|poster|boxart|key ?art|folder|banner|hero|wallpaper|background/i.test(e.name) }); } catch {} }
+      else if (e.isDirectory() && depth < 2 && !JUNK_DIR.test(e.name)) await walk(f, depth + 1);
+    }
+  };
+  await walk(dir, 0);
+  return found.sort((a, b) => (b.named - a.named) || (b.size - a.size)).slice(0, 6).map(x => x.f);
 }
 async function hdCandidates(g) {
   const urls = [];
@@ -358,7 +456,7 @@ async function hdCandidates(g) {
       const h = { Authorization: 'Bearer ' + cfg.apiKey }, get = async p => (await (await fetch('https://www.steamgriddb.com/api/v2/' + p, { headers: h, signal: AbortSignal.timeout(8000) })).json())?.data || [];
       let gid = null;
       if (appid) { try { gid = (await (await fetch(`https://www.steamgriddb.com/api/v2/games/steam/${appid}`, { headers: h, signal: AbortSignal.timeout(8000) })).json())?.data?.id; } catch {} }
-      if (!gid) gid = (await get('search/autocomplete/' + encodeURIComponent(g.name)))[0]?.id;
+      if (!gid) gid = (await get('search/autocomplete/' + encodeURIComponent((await gameNames(g))[0] || g.name)))[0]?.id;
       if (gid) {
         for (const x of await get(`grids/game/${gid}`)) if (isHD(x)) urls.push([x.url, 'SteamGridDB']);
         for (const x of (await get(`heroes/game/${gid}`)).slice(0, 4)) if (isHD(x)) urls.push([x.url, 'SteamGridDB (banner)']);
@@ -371,22 +469,27 @@ async function hdCandidates(g) {
       for (const s of (d?.[appid]?.data?.screenshots || []).slice(0, 3)) urls.push([s.path_full, 'Captura de Steam']);
     } catch {}
   }
+  // Juegos portables o instalados a mano: imágenes grandes que vengan en su propia carpeta (hasta 2 subcarpetas)
+  for (const f of await localImages(g.exe ? path.dirname(g.exe) : g.dir)) urls.push(['file:' + f, 'Carpeta del juego']);
   const out = [], seen = new Set();
   for (const [u, src] of urls) {
     if (out.length >= 3) break;
     if (seen.has(u)) continue; seen.add(u);
     try {
-      const buf = await download(u), s = imgSize(buf);
+      const buf = u.startsWith('file:') ? await fs.promises.readFile(u.slice(5)) : await download(u), s = imgSize(buf);
       if (isHD(s)) out.push({ buf, w: s.width, h: s.height, src });            // se comprueba la imagen real, no lo que dice la web
     } catch {}
   }
   return out;
 }
 const hdCands = new Map();
-function hdScan() {
+// Datos del juego elegido (solo ese): resolución actual de su portada y si ya llega a HD
+function hdInfo(id) {
   hdCands.clear();
-  return listGames().map(g => ({ g, s: coverRes(g.id) })).filter(x => !isHD(x.s))
-    .map(({ g, s }) => ({ id: g.id, name: g.name, res: s ? `${s.width}x${s.height}` : 'sin portada' }));
+  const g = listGames().find(x => x.id === id);
+  if (!g) return null;
+  const s = coverRes(id);
+  return { id, name: g.name, res: s ? s.width + 'x' + s.height : 'sin portada', hd: isHD(s), key: !!cfg.apiKey };
 }
 async function hdOptions(id) {
   const g = listGames().find(x => x.id === id);
@@ -908,8 +1011,11 @@ ipcMain.handle('perf', (e, p) => {
   const cur = cfg.gpuMode || 'auto';
   t.tried[cur] = Math.round(fps); t.pending = false;
   const next = GPU_MODES.find(m => !(m.id in t.tried));
-  if (fps >= 52 || !next) {                                  // suficiente (o no quedan modos): se queda con el mejor
-    const best = Object.entries(t.tried).sort((a, b) => b[1] - a[1])[0][0];
+  // "Suficiente" = ~85 % de la frecuencia del monitor (con tope en 52): en un monitor de 50 Hz no se exigen 52 fps imposibles
+  let hz = 60; try { hz = screen.getPrimaryDisplay().displayFrequency || 60; } catch {}
+  const enough = Math.min(52, hz * .85);
+  if ((fps >= enough && cur !== 'soft') || !next || next.id === 'soft' && Object.entries(t.tried).some(([m, f]) => m !== 'soft' && f >= 20)) {
+    const best = bestMode(t.tried);                          // suficiente, o ya se probaron todos los modos con GPU: el mejor
     t.done = true;
     if (best !== cur) { cfg.gpuMode = best; t.pending = true; saveCfg(); relaunchApp(); return { action: 'restart', mode: best }; }
     saveCfg();
@@ -918,7 +1024,8 @@ ipcMain.handle('perf', (e, p) => {
   cfg.gpuMode = next.id; t.pending = true; saveCfg(); relaunchApp();
   return { action: 'restart', mode: next.id };
 });
-ipcMain.handle('retune', () => { cfg.tune = { done: false, tried: {}, pending: true }; cfg.gpuMode = 'auto'; saveCfg(); relaunchApp(); });
+// Sin 'pending': si no, el arranque siguiente daba por fallado el modo 'auto' sin probarlo y saltaba al siguiente
+ipcMain.handle('retune', () => { cfg.tune = { done: false, tried: {} }; cfg.gpuMode = 'auto'; saveCfg(); relaunchApp(); });
 
 ipcMain.handle('remove', (e, id) => {
   cfg.custom = cfg.custom.filter(c => c.id !== id);
@@ -939,7 +1046,7 @@ ipcMain.handle('setCover', async (e, id) => {
   (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano
   return fileUrl(coverFile(id)) + '?t=' + Date.now();
 });
-ipcMain.handle('hdScan', hdScan);
+ipcMain.handle('hdInfo', (e, id) => hdInfo(id));
 ipcMain.handle('hdOptions', (e, id) => hdOptions(id));
 ipcMain.handle('hdApply', (e, id, i) => hdApply(id, i));
 ipcMain.handle('hdDone', () => { hdCands.clear(); });             // libera las imágenes descargadas
