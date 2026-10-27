@@ -20,6 +20,10 @@ y permite añadir cualquier .exe con portada automática.
 - **F** muestra los fps, el modo gráfico, el estado de la GPU y **qué dibuja el fondo** (la GPU real o software) y a qué resolución (para diagnosticar lentitud).
 
 ## Rendimiento (60 fps)
+- **La GPU dibuja dentro del proceso principal** (`in-process-gpu`). Electron normalmente dibuja desde un proceso aparte; el driver de
+  NVIDIA lo trata como una app en segundo plano y, con "Velocidad máxima de fotogramas de aplicación en segundo plano" activada, lo
+  limita. Medido en una GTX 1660 Super con monitor de 200 Hz: **20 fps** con el proceso aparte, **200 fps** dentro (y 156 sin GPU).
+  Por eso antes la optimización terminaba eligiendo "sin GPU". La 1.13.0 repite la prueba una vez.
 - Antes se forzaba la GPU dedicada; en portátiles con dos GPU eso puede dejar la interfaz a ~20 fps. Ahora arranca con los valores por defecto
   y **la primera vez el launcher mide sus fps** moviendo la selección ~3 s ("Optimizando gráficos…"). Si no llega a ~85 % de la frecuencia
   del monitor (tope 52 fps) prueba solo otro modo (integrada, OpenGL, dedicada), se reinicia y se queda con el mejor. El resultado se guarda
@@ -92,8 +96,8 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
   fondo toma el color y la ola sigue blanca. El video solo se reproduce mientras ese fondo se ve. Si no se puede leer, se usa la ola
   dibujada por el shader (láminas translúcidas, como antes).
   ⚠️ El video es material de Sony: queda incluido en el repositorio y en cada release (decisión del dueño del proyecto).
-- **Resolución automática del fondo** (clásico y PS3): si no llega a sus 30 fps durante ~2 s (GPU integrada, sin aceleración…) se dibuja más chico, hasta la mitad.
-  Con WebGL por software arranca directamente al 60 %.
+- **Ajustes > Nitidez del fondo** (25–100 %, por defecto **100 %** = resolución de la pantalla): a qué resolución se dibuja el fondo
+  animado (clásico y PS3). Si con 100 % se traba, se baja con − / + (de a 10). La tecla F muestra la resolución y la nitidez.
 - **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)
   y se reproduce sin sonido y en bucle. Se pausa con la portada de fondo, esperando un juego, con el launcher oculto o pausado.
   Si cancelás el diálogo se vuelve al último video subido. Si el formato no se puede reproducir, vuelve al fondo clásico.

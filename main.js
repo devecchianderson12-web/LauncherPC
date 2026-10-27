@@ -34,8 +34,9 @@ try { early = JSON.parse(fs.readFileSync(earlyCfgFile, 'utf8')); } catch {}
   early.tune = early.tune || { done: false, tried: {} };
   // Hasta la 1.10.0 la prueba daba por fallado cada modo nuevo sin medirlo (ver 'pending' abajo), así que casi todos
   // quedaron en un modo malo ("soft" o "gl"). Se vuelve a probar una vez desde el modo normal, con la prueba arreglada.
-  if (early.tuneVer !== 3) {
-    early.gpuMode = 'auto'; early.tune = { done: false, tried: {} }; early.tuneVer = 3;
+  // tuneVer 4: con 'in-process-gpu' (abajo) la GPU deja de estar limitada a 20 fps, así que se mide otra vez.
+  if (early.tuneVer !== 4) {
+    early.gpuMode = 'auto'; early.tune = { done: false, tried: {} }; early.tuneVer = 4;
     try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
   }
   const tt = early.tune;
@@ -52,7 +53,14 @@ try { early = JSON.parse(fs.readFileSync(earlyCfgFile, 'utf8')); } catch {}
   tt.pending = !tt.done; tt.pendingMode = tt.done ? undefined : id;
   try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
   const m = GPU_MODES.find(x => x.id === id);
-  if (m.soft) app.disableHardwareAcceleration(); else if (m.sw) app.commandLine.appendSwitch(...m.sw);
+  if (m.soft) app.disableHardwareAcceleration();
+  else {
+    if (m.sw) app.commandLine.appendSwitch(...m.sw);
+    // La GPU dibuja dentro del proceso principal (el dueño de la ventana). Con el proceso de GPU aparte, el driver
+    // de NVIDIA lo trata como app "en segundo plano" y, si está activado "Velocidad máxima de fotogramas de aplicación
+    // en segundo plano", lo limita (medido en una GTX 1660 a 200 Hz: 20 fps aparte, 200 fps dentro).
+    app.commandLine.appendSwitch('in-process-gpu');
+  }
 })();
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -1187,7 +1195,7 @@ ipcMain.handle('useVideo', async () => {
   } catch (e) { return { error: 'No se pudo copiar el video (¿falta espacio?)' }; }
 });
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgSharp: Number.isFinite(cfg.bgSharp) ? cfg.bgSharp : 100, bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
   if (patch.layout === 'ps4' || patch.layout === 'center' || patch.layout === 'ps3') cfg.layout = patch.layout;
@@ -1202,7 +1210,8 @@ ipcMain.handle('setCfg', (e, patch) => {
   if (Number.isFinite(patch.bgSpeed)) cfg.bgSpeed = Math.max(1, Math.min(100, Math.round(patch.bgSpeed)));
   if (['classic', 'ps3', 'video'].includes(patch.bgType)) cfg.bgType = patch.bgType;
   if (patch.btnStyle === 'min' || patch.btnStyle === 'color') cfg.btnStyle = patch.btnStyle;
-  if (Number.isFinite(patch.artBlur))cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
+  if (Number.isFinite(patch.artBlur)) cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
+  if (Number.isFinite(patch.bgSharp)) cfg.bgSharp = Math.max(25, Math.min(100, Math.round(patch.bgSharp)));
   saveCfg();
   if ('hideTaskbar' in patch) syncTaskbar();
   if ('autostart' in patch || 'minimized' in patch) applyAutostart();

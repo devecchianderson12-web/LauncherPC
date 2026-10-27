@@ -284,6 +284,7 @@
   <div class="row"><span id="gfxinfo">Gráficos</span><button class="btn" id="b-tune">Optimizar</button></div>
   <div class="row"><span>Diseño</span><div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button><button class="btn" id="b-ps3">PS3</button></div></div>
   <div class="row"><span>Fondo</span><div class="btns"><button class="btn" id="b-bgvid">Subir video</button><button class="btn" id="b-bgcls">Fondo clásico</button><button class="btn" id="b-bgps3">Fondo original PS3</button></div></div>
+  <div class="row"><span id="sharpinfo">Nitidez del fondo</span><button class="btn sm" id="b-shm">−</button><input type="range" id="sharp" min="25" max="100" step="5" value="100"><button class="btn sm" id="b-shp">+</button></div>
   <div class="row"><span>Botones de la ayuda</span><div class="btns"><button class="btn" id="b-btmin">Minimalista</button><button class="btn" id="b-btcol">Colores</button></div></div>
   <div class="row"><span>Fondo animado</span><div class="btns"><button class="btn" id="b-bgon">Sí</button><button class="btn" id="b-bgoff">No</button></div></div>
   <div class="row"><span>Color del fondo</span><div class="btns"><button class="btn" id="b-cdef">Original</button><button class="btn" id="b-ccol">Color</button><button class="btn" id="b-crb">Arcoíris</button></div></div>
@@ -369,10 +370,10 @@ const Wave = (() => {
   vid.addEventListener('error', () => { vidOk = false; });
   const vidWanted = () => on && xm && vidOk && !!gl;
   const syncVid = () => { if (vidWanted()) { if (vid.paused) vid.play().catch(() => {}); } else if (!vid.paused) vid.pause(); };
-  let xm = 0;                                   // 1 = "Fondo original PS3": hebras finas, se dibuja a algo más de resolución
-  // Resolución automática: si el fondo no llega a sus 30 fps (GPU integrada, sin GPU…) se dibuja más chico hasta que llegue
-  let dyn = 1, slow = 0;
-  const scale = () => (xm ? .67 : .4) * dyn;      // PS3: hebras finas, a 2/3 de resolución se ven nítidas (el shader es liviano)
+  let xm = 0;                                   // 1 = "Fondo original PS3" (video del XMB o la ola dibujada)
+  // Nitidez del fondo (Ajustes): 100 % = resolución de la pantalla. Si la PC no da abasto, se baja a mano desde Ajustes.
+  let sharp = 100;
+  const scale = () => sharp / 100;
   const t0 = performance.now();
   const FS = `precision highp float;
 uniform vec2 R;
@@ -512,7 +513,6 @@ void main() {
     for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
     gl.uniform1i(gl.getUniformLocation(pr, 'V'), 0);
     // Sin GPU real (WebGL por software: lo dibuja el procesador) se arranca directamente a menos resolución
-    try { const d = gl.getExtension('WEBGL_debug_renderer_info'); if (d && /swiftshader|basic render|llvmpipe|software/i.test(gl.getParameter(d.UNMASKED_RENDERER_WEBGL))) dyn = .6; } catch {}
     return true;
   }
   // Misma fórmula que el shader, para la versión 2D
@@ -548,12 +548,8 @@ void main() {
     if (!on) return;
     raf = requestAnimationFrame(frame);
     if (ts - last < 32) return;                      // 30 fps
-    const gap = last ? ts - last : 0;
-    const dt = last ? Math.min(gap / 1000, .1) : 0;
+    const dt = last ? Math.min((ts - last) / 1000, .1) : 0;
     last = ts;
-    // Más de ~45 ms entre dibujos durante ~2 s seguidos = no da abasto: baja la resolución (hasta la mitad)
-    if (gap > 45 && gap < 1000) { if (++slow > 45 && dyn > .5) { dyn = Math.max(.5, dyn * .8); slow = 0; size(); } }
-    else if (gap) slow = Math.max(0, slow - 1);
     Tint.adv(dt);
     const T = (ts - t0) / 1000;
     if (gl) {
@@ -581,12 +577,13 @@ void main() {
     },
     size, theme(v) { purple = v; },
     style(v) { xm = v ? 1 : 0; size(); if (on) { last = 0; } syncVid(); },
+    sharpness(v) { sharp = Math.max(25, Math.min(100, Math.round(v))); size(); },
     video(url) { if (url && vid.getAttribute('src') !== url) { vidOk = false; vLast = -1; vid.src = url; } },
     // Para la tecla F: qué dibuja el fondo (GPU real o software) y a qué resolución
     info() {
       let r = gl ? 'WebGL' : ctx2 ? 'canvas 2D' : 'sin iniciar';
       try { const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); if (d) r = gl.getParameter(d.UNMASKED_RENDERER_WEBGL).replace(/^ANGLE \(|\)$/g, '').replace(/\s*\(0x[0-9a-f]+\)/i, '').slice(0, 70); } catch {}
-      return `  ·  fondo: ${r}${xm && vidOk ? ' · video XMB' : ''} · ${cv.width}x${cv.height}${dyn < 1 ? ' (auto ' + Math.round(dyn * 100) + '%)' : ''}`;
+      return `  ·  fondo: ${r}${xm && vidOk ? ' · video XMB' : ''} · ${cv.width}x${cv.height} (nitidez ${sharp} %)`;
     }
   };
 })();
@@ -1338,6 +1335,16 @@ bgVid.addEventListener('error', () => {
 $('#b-bgvid').onclick = pickVideo;
 $('#b-bgcls').onclick = () => setBgType('classic');
 $('#b-bgps3').onclick = () => setBgType('ps3');
+// Nitidez del fondo: a qué resolución se dibuja (100 % = la de la pantalla). Si con 100 % se traba, se baja de a 10.
+function setBgSharp(v, save = true) {
+  v = Math.max(25, Math.min(100, Math.round(v / 5) * 5));
+  Wave.sharpness(v); $('#sharp').value = v; $('#sharpinfo').textContent = `Nitidez del fondo: ${v} %`;
+  if (save) window.api.setCfg({ bgSharp: v });
+}
+$('#sharp').addEventListener('input', e => setBgSharp(+e.target.value, false));
+$('#sharp').addEventListener('change', e => setBgSharp(+e.target.value));
+$('#b-shm').onclick = () => setBgSharp(+$('#sharp').value - 10);
+$('#b-shp').onclick = () => setBgSharp(+$('#sharp').value + 10);
 // Botones de la ayuda: minimalista (contorno blanco) o con los colores reales del mando detectado
 function setBtnStyle(s, save = true) {
   document.body.classList.toggle('btncolor', s === 'color');
@@ -1835,6 +1842,7 @@ window.api.onResume(() => {
   syncColorUI();
   setArtBlur(Number.isFinite(c.artBlur) ? c.artBlur : 55, false);
   Wave.video(c.xmbVideo);
+  setBgSharp(Number.isFinite(c.bgSharp) ? c.bgSharp : 100, false);
   bgVideoUrl = c.bgVideo || ''; setBgType(c.bgType || 'classic', false);
   setBtnStyle(c.btnStyle || 'min', false);
   setBg(c.bg !== false, false);
