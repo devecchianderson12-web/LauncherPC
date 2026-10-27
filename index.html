@@ -182,6 +182,33 @@
   .btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
   .btn.on { background: #fff; color: #0a2a7a; }
   .btn.pf { outline: 3px solid #fff; outline-offset: 3px; }
+  /* Explorador de portadas: pantalla completa, cuadros grandes para verse de lejos; se maneja con teclado, mouse o mando */
+  #picker { position: fixed; inset: 0; z-index: 12; background: rgba(2,8,42,.96); display: flex; flex-direction: column;
+    gap: calc(var(--u) * 22); padding: calc(var(--u) * 46) calc(var(--u) * 80) calc(var(--u) * 30); opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
+  #picker.open { opacity: 1; visibility: visible; transition: opacity .2s; }
+  .pk-head { display: flex; align-items: baseline; gap: calc(var(--u) * 28); min-width: 0; }
+  #pk-title { font-size: calc(var(--u) * 40); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 55%; }
+  #pk-path { font-size: calc(var(--u) * 21); opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #pk-places { display: flex; gap: calc(var(--u) * 14); flex-wrap: wrap; }
+  .pk-pl { padding: calc(var(--u) * 10) calc(var(--u) * 24); border: calc(var(--u) * 2) solid rgba(255,255,255,.45); background: transparent; color: #fff;
+    font: inherit; font-size: calc(var(--u) * 22); cursor: pointer; border-radius: calc(var(--u) * 30); }
+  .pk-pl.f { background: #fff; color: #0a2a7a; border-color: #fff; }
+  #pk-grid { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: grid; align-content: start;
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 240), 1fr)); gap: calc(var(--u) * 26); padding: calc(var(--u) * 10); }
+  #pk-grid::-webkit-scrollbar { display: none; }
+  .pk-t { display: flex; flex-direction: column; gap: calc(var(--u) * 10); cursor: pointer; transition: transform .15s ease-out; }
+  .pk-i { aspect-ratio: 2 / 3; background: rgba(255,255,255,.07); display: flex; align-items: center; justify-content: center; overflow: hidden;
+    outline: calc(var(--u) * 4) solid transparent; outline-offset: calc(var(--u) * 4); transition: outline-color .12s; }
+  .pk-i img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .2s; }
+  .pk-i img.in { opacity: 1; }
+  .pk-i svg { width: 46%; height: 46%; opacity: .85; }
+  .pk-n { font-size: calc(var(--u) * 20); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .8; text-align: center; }
+  .pk-t.f { transform: scale(1.04); }
+  .pk-t.f .pk-i { outline-color: #fff; }
+  .pk-t.f .pk-n { opacity: 1; }
+  #pk-empty { grid-column: 1 / -1; font-size: calc(var(--u) * 26); opacity: .6; padding: calc(var(--u) * 40) 0; text-align: center; }
+  #pk-foot { display: flex; gap: calc(var(--u) * 30); font-size: calc(var(--u) * 21); opacity: .8; flex-wrap: wrap; }
+  #pk-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); }
   #padwiz { position: fixed; inset: 0; background: rgba(2,8,42,.97); display: none; flex-direction: column; align-items: center; justify-content: center;
     gap: 22px; z-index: 20; font-size: 30px; text-align: center; padding: 40px; }
   #padwiz.open { display: flex; }
@@ -212,6 +239,12 @@
 
 <div id="wait"><div class="l1">Iniciando</div><div class="l2" id="lname"></div><div class="bar"><i></i></div><div class="l3">Se minimiza al abrirse el juego en pantalla completa · Esc para cancelar</div></div>
 
+<div id="picker">
+  <div class="pk-head"><div id="pk-title"></div><div id="pk-path"></div></div>
+  <div id="pk-places"></div>
+  <div id="pk-grid"></div>
+  <div id="pk-foot"></div>
+</div>
 <div id="padwiz"><div id="pw-t"></div><small id="pw-s"></small><div class="btns"><button class="btn" id="pw-skip">Omitir</button><button class="btn" id="pw-cancel">Cancelar</button></div></div>
 <div id="upd"><b id="upd-t"></b><span id="upd-s">Se cerrará y se abrirá la versión nueva</span>
   <div class="btns"><button class="btn on" id="upd-go">Actualizar</button><button class="btn" id="upd-no">Ahora no</button></div>
@@ -673,7 +706,7 @@ function step(dx, dy) { if (layout === 'ps3') xmbMove(dx, dy); else if (dx) go(s
 const nextLayout = () => ({ ps4: 'center', center: 'ps3', ps3: 'ps4' }[layout] || 'ps4');
 let wheelAt = 0;
 addEventListener('wheel', e => {
-  if (layout !== 'ps3' || settingsOpen() || launching || !e.deltaY) return;
+  if (layout !== 'ps3' || settingsOpen() || pickerOpen() || launching || !e.deltaY) return;
   const now = performance.now(); if (now - wheelAt < 90) return; wheelAt = now;
   xmbMove(0, Math.sign(e.deltaY));
 }, { passive: true });
@@ -797,7 +830,7 @@ function hideArt() {
 function armArt() {
   hideArt();
   const it = items[sel];
-  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen()) return;
+  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen() || pickerOpen()) return;
   artT = setTimeout(() => showArt(it), 1000);
 }
 // preview = true: se dibuja aunque Ajustes esté abierto (para ver el difuminado mientras mueves la barra)
@@ -852,11 +885,136 @@ async function activate() {
   } else if (it.type === 'cfg') openSettings();
   else launchGame(it);
 }
+// ---------- Explorador de portadas (tecla C / botón de portada) ----------
+// Propio del launcher en vez del diálogo de Windows: pantalla completa, cuadros grandes con miniatura, y se maneja
+// con teclado, mouse o mando. Arriba los lugares rápidos (zona 'places'), debajo la cuadrícula (zona 'grid').
+const picker = $('#picker'), pkGrid = $('#pk-grid'), pkPlaces = $('#pk-places');
+const pickerOpen = () => picker.classList.contains('open');
+const ICON_DIR = '<svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2h8.4A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" fill="#fff" opacity=".9"/></svg>';
+const ICON_UP = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" stroke="#fff" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+let pk = null, pkSeq = 0;
+
+function setCoverUrl(it, url) {
+  covers[it.id] = url;
+  const k = items.indexOf(it);
+  if (k >= 0 && tiles[k]?._setImg) tiles[k]._setImg(url);
+}
 async function changeCover() {
   const it = items[sel];
-  if (!it || it.type === 'add' || it.type === 'cfg') return;
-  const url = await window.api.setCover(it.id);
-  if (url) { covers[it.id] = url; tiles[sel]._setImg(url); }
+  if (!it || it.type === 'add' || it.type === 'cfg' || pickerOpen()) return;
+  hideArt();
+  const r = await window.api.pickPlaces(it.id);
+  pk = { item: it, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: [...r.places, { name: 'Explorador de Windows…', win: true }] };
+  $('#pk-title').textContent = 'Portada: ' + it.name;
+  pkPlaces.innerHTML = '';
+  pk.places.forEach((p, k) => {
+    const b = document.createElement('button'); b.className = 'pk-pl'; b.textContent = p.name;
+    b.onclick = () => { pk.zone = 'places'; pk.pi = k; pkActivate(); };
+    pkPlaces.appendChild(b);
+  });
+  picker.classList.add('open'); pkHint();
+  await pkOpen(r.start);
+}
+function closePicker() {
+  if (!pk) return;
+  pk = null; pkSeq++; pkThumbQ.length = 0;
+  picker.classList.remove('open');
+  setTimeout(() => { if (!pk) pkGrid.innerHTML = ''; }, 250);            // libera las miniaturas cuando ya no se ven
+  armArt();
+}
+async function pkOpen(dir, focus) {
+  const seq = ++pkSeq;
+  const r = await window.api.pickList(dir);
+  if (!pk || seq !== pkSeq) return;
+  if (r.error) { toast(r.error); return; }
+  pk.dir = r.dir; pk.parent = r.parent;
+  pk.entries = (r.parent ? [{ type: 'up', name: 'Subir', path: r.parent }] : []).concat(r.entries);
+  const segs = r.dir.split(/[\\/]/).filter(Boolean);                   // rutas largas: solo las últimas carpetas
+  $('#pk-path').textContent = (segs.length > 4 ? '…\\' + segs.slice(-3).join('\\') : r.dir) + (r.more ? ` · se muestran ${r.entries.length}, hay ${r.more} más` : '');
+  pkThumbQ.length = 0; pkIO.disconnect();
+  const frag = document.createDocumentFragment();
+  pk.entries.forEach((e, i) => {
+    const t = document.createElement('div'); t.className = 'pk-t';
+    const box = document.createElement('div'); box.className = 'pk-i';
+    if (e.type === 'img') { const im = document.createElement('img'); im.alt = ''; box.appendChild(im); t._file = e.path; }
+    else box.innerHTML = e.type === 'up' ? ICON_UP : ICON_DIR;
+    const n = document.createElement('div'); n.className = 'pk-n'; n.textContent = e.name;
+    t.append(box, n);
+    t.onclick = () => { pk.zone = 'grid'; pk.i = i; pkActivate(); };
+    t.onmousemove = () => { if (pk && (pk.zone !== 'grid' || pk.i !== i)) { pk.zone = 'grid'; pk.i = i; pkMark(false); } };
+    frag.appendChild(t);
+  });
+  pkGrid.innerHTML = '';
+  if (!r.entries.length) { const em = document.createElement('div'); em.id = 'pk-empty'; em.textContent = 'No hay imágenes ni carpetas aquí'; frag.appendChild(em); }
+  pkGrid.appendChild(frag); pkGrid.scrollTop = 0;
+  [...pkGrid.children].forEach(t => { if (t._file) pkIO.observe(t); });
+  const fi = focus ? pk.entries.findIndex(e => e.path === focus) : -1;
+  pk.i = fi >= 0 ? fi : (r.parent && pk.entries.length > 1 ? 1 : 0);
+  pkMark(true);
+}
+// Miniaturas: solo las que entran en pantalla, 4 a la vez
+const pkThumbQ = []; let pkThumbN = 0;
+const pkIO = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { pkIO.unobserve(e.target); pkThumbQ.push(e.target); pkThumbRun(); } }), { root: pkGrid, rootMargin: '400px 0px' });
+function pkThumbRun() {
+  while (pkThumbN < 4 && pkThumbQ.length) {
+    const t = pkThumbQ.shift(), seq = pkSeq; pkThumbN++;
+    window.api.pickThumb(t._file).then(url => {
+      if (url && seq === pkSeq) { const im = t.querySelector('img'); im.onload = () => im.classList.add('in'); im.src = url; }
+    }).finally(() => { pkThumbN--; pkThumbRun(); });
+  }
+}
+function pkMark(scroll) {
+  if (!pk) return;
+  [...pkPlaces.children].forEach((b, k) => b.classList.toggle('f', pk.zone === 'places' && k === pk.pi));
+  [...pkGrid.children].forEach((t, k) => t.classList.toggle('f', pk.zone === 'grid' && k === pk.i));
+  if (scroll && pk.zone === 'grid') pkGrid.children[pk.i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+const pkCols = () => Math.max(1, getComputedStyle(pkGrid).gridTemplateColumns.split(' ').length);
+function pkMove(dx, dy) {
+  if (!pk) return;
+  if (pk.zone === 'places') {
+    if (dy > 0 && pk.entries.length) pk.zone = 'grid';
+    else if (dx) pk.pi = Math.max(0, Math.min(pk.places.length - 1, pk.pi + dx));
+  } else {
+    const c = pkCols(), n = pk.entries.length;
+    if (dy < 0 && pk.i < c) pk.zone = 'places';                      // desde la primera fila se sube a los lugares
+    else if (n) pk.i = Math.max(0, Math.min(n - 1, pk.i + dx + dy * c));
+  }
+  pkMark(true);
+}
+function pkPage(d) { if (pk && pk.zone === 'grid') { const rows = Math.max(1, Math.floor(pkGrid.clientHeight / (pkGrid.children[0]?.offsetHeight || 300))); pkMove(0, d * rows); } }
+async function pkActivate() {
+  if (!pk) return;
+  if (pk.zone === 'places') {
+    const p = pk.places[pk.pi];
+    if (p.win) {                                               // el diálogo clásico de Windows, por si hace falta
+      const it = pk.item, url = await window.api.setCover(it.id);
+      if (url) { setCoverUrl(it, url); closePicker(); toast('Portada cambiada'); }
+      return;
+    }
+    pk.zone = 'grid'; pkOpen(p.path); return;
+  }
+  const e = pk.entries[pk.i]; if (!e) return;
+  if (e.type === 'up') pkOpen(e.path, pk.dir);                 // al subir, queda marcada la carpeta de la que venías
+  else if (e.type === 'dir') pkOpen(e.path);
+  else {
+    const it = pk.item, url = await window.api.pickApply(it.id, e.path);
+    if (!url) { toast('No se pudo usar esa imagen'); return; }
+    setCoverUrl(it, url); closePicker(); toast('Portada cambiada');
+  }
+}
+function pkBack() {                                            // atrás: de los lugares a la cuadrícula, después carpeta de arriba, y al final cerrar
+  if (!pk) return;
+  if (pk.zone === 'places') { pk.zone = 'grid'; pkMark(true); }
+  else if (pk.parent) pkOpen(pk.parent, pk.dir);
+  else closePicker();
+}
+picker.addEventListener('contextmenu', e => { e.preventDefault(); pkBack(); });   // clic derecho = atrás
+// Ayuda de abajo con los botones del dispositivo que estés usando
+function pkHint() {
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Retroceso', cover: 'Esc', scan: 'RePág', layout: 'AvPág' };
+  const parts = [[L.ok, 'elegir / abrir'], [L.back, 'carpeta de arriba'], [L.cover, 'cerrar'], [L.scan, 'página arriba'], [L.layout, 'página abajo']];
+  $('#pk-foot').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('') + (gp ? '' : '<span class="hk">Clic derecho: atrás</span>');
 }
 // Tecla P / gatillo izquierdo: busca en internet portadas mejores para las que se ven mal (iconos, cabeceras apaisadas, imágenes chicas)
 let upgrading = false;
@@ -1173,6 +1331,23 @@ addEventListener('keydown', e => {
   setHint(null);
   if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
+  if (pickerOpen()) {
+    if (k.startsWith('Arrow')) {
+      const now = performance.now();
+      if (e.repeat && now - lastStep < 90) return;
+      lastStep = now;
+      pkMove(k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0);
+    }
+    else if (k === 'Enter') pkActivate();
+    else if (k === 'Backspace') pkBack();
+    else if (k === 'Escape') closePicker();
+    else if (k === 'PageUp') pkPage(-1);
+    else if (k === 'PageDown') pkPage(1);
+    else if (k === 'Home' && pk) { pk.zone = 'grid'; pk.i = 0; pkMark(true); }
+    else if (k === 'End' && pk) { pk.zone = 'grid'; pk.i = Math.max(0, pk.entries.length - 1); pkMark(true); }
+    e.preventDefault();
+    return;
+  }
   if (launching) { if (k === 'Escape') back(); return; }     // esperando al juego: solo Esc (cancelar)
   if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'ArrowUp' || k === 'ArrowDown') {
     const now = performance.now();
@@ -1215,7 +1390,7 @@ const BTN = {
 };
 const HAT = [[-1, '↑'], [-.43, '→'], [.14, '↓'], [.71, '←']];
 const KIND_NAME = { xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo', generic: 'Mando genérico' };
-let padMaps = {}, padIdx = -1, padSig = {}, hintKey = '';
+let padMaps = {}, padIdx = -1, padSig = {}, hintKey = '', hintGp = null;   // hintGp: mando de la ayuda actual (null = teclado)
 // Un botón dibujado: círculo para los de cara (A, ✕…), píldora para el resto (L1, RB, Options) y tecla para el teclado.
 // La clase de color (xbox-A, ps-x…) solo pinta con "Botones: Colores" en Ajustes.
 const PS_CLS = { '✕': 'x', '○': 'o', '□': 's', '△': 't' };
@@ -1255,7 +1430,9 @@ function setHint(gp) {                                        // gp = null -> te
   const key = gp ? gp.id + (padMaps[gp.id] ? '*' : '') : 'kb';
   if (key === hintKey) return;
   hintKey = key;
+  hintGp = gp;
   $('#hint').innerHTML = gp ? hintHtml(labelsOf(gp), kindOf(gp)) : hintHtml(KB_KEYS, 'kb');
+  if (pickerOpen()) pkHint();
 }
 setHint(null);
 const padList = () => [...(navigator.getGamepads() || [])].filter(Boolean);
@@ -1300,7 +1477,18 @@ function poll() {
   if (changed) { padIdx = gp.index; setHint(gp); }
   if (wiz) { wizPoll(list.find(g => g.index === wiz.idx) || gp); return; }
 
-  const P = profileOf(gp), on = k => P[k].some(bd => bound(gp, bd)), now = performance.now();
+  const P = profileOf(gp), on = k => (P[k] || []).some(bd => bound(gp, bd)), now = performance.now();
+  // Hombros (L1 R1 L2 R2): esperan 180 ms antes de actuar; si en ese tiempo se aprieta otro, es la combinación de abrir/ocultar y no hacen nada
+  const shN = [4, 5, 6, 7].filter(b => gp.buttons[b]?.pressed).length;
+  if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
+  const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
+  if (pickerOpen()) {
+    edge('ok', on('ok'), pkActivate); edge('back', on('back'), pkBack); edge('cover', on('cover'), closePicker);
+    edge('scan', on('scan'), sh(() => pkPage(-1))); edge('layout', on('layout'), sh(() => pkPage(1)));
+    repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => pkMove(d, 0));
+    repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => pkMove(0, d));
+    return;
+  }
   if (settingsOpen()) {
     edge('up', on('up') || on('left'), () => padFocus(-1));
     edge('down', on('down') || on('right'), () => padFocus(1));
@@ -1310,10 +1498,6 @@ function poll() {
   }
   if (launching) { edge('back', on('back'), back); return; }
   edge('ok', on('ok'), activate); edge('back', on('back'), back);
-  // Hombros (L1 R1 L2 R2): esperan 180 ms antes de actuar; si en ese tiempo se aprieta otro, es la combinación de abrir/ocultar y no hacen nada
-  const shN = [4, 5, 6, 7].filter(b => gp.buttons[b]?.pressed).length;
-  if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
-  const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
   edge('remove', on('remove'), removeCurrent); edge('cover', on('cover'), changeCover); edge('scan', on('scan'), sh(rescan));
   edge('layout', on('layout'), sh(() => setLayout(nextLayout())));
   edge('upgrade', on('upgrade'), sh(upgradeCovers));
@@ -1450,7 +1634,7 @@ window.api.onEnter(async () => {
   if (!moved) { sel = 0; place(true); updateInfo(); }
   armArt(); hintEmpty(); autotune();
 });
-window.api.onLeave(() => { document.body.classList.add('leaving'); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
+window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
 
 // ---------- Pausa: otro programa está en primer plano ----------
 // La ventana sigue detrás con su último fotograma, pero sin fondo animado, mando, reloj ni temporizadores: no consume nada.

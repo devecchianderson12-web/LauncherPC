@@ -889,6 +889,76 @@ ipcMain.handle('setCover', async (e, id) => {
 });
 ipcMain.handle('upgradeCovers', upgradeCovers);
 
+// ---------- Explorador de portadas propio (pantalla completa, cuadros grandes, mando) ----------
+const IMG_EXT = /\.(jpe?g|png|webp|gif|bmp)$/i;
+const MAX_ENTRIES = 3000;
+// Lugares rápidos: carpeta del juego, Imágenes, Descargas, Escritorio, Documentos y los discos
+ipcMain.handle('pickPlaces', (e, id) => {
+  const out = [];
+  const g = listGames().find(x => x.id === id);
+  const gdir = g && (g.exe ? path.dirname(g.exe) : g.dir);
+  if (gdir && fs.existsSync(gdir)) out.push({ name: 'Carpeta del juego', path: gdir, kind: 'game' });
+  for (const [k, name] of [['pictures', 'Imágenes'], ['downloads', 'Descargas'], ['desktop', 'Escritorio'], ['documents', 'Documentos']]) {
+    try { const p = app.getPath(k); if (fs.existsSync(p)) out.push({ name, path: p, kind: k }); } catch {}
+  }
+  if (process.platform === 'win32') {
+    for (const l of 'CDEFGHIJKLMNOPQRSTUVWXYZ') { const p = l + ':\\'; try { fs.accessSync(p); out.push({ name: 'Disco ' + l + ':', path: p, kind: 'drive' }); } catch {} }
+  }
+  const last = cfg.pickDir && fs.existsSync(cfg.pickDir) ? cfg.pickDir : null;
+  return { places: out, start: last || out.find(p => p.kind === 'pictures')?.path || out[0]?.path || os.homedir() };
+});
+// Contenido de una carpeta: primero las subcarpetas, después las imágenes (sin archivos ocultos ni de sistema)
+ipcMain.handle('pickList', async (e, dir) => {
+  try {
+    dir = path.resolve(String(dir));
+    const ents = await fs.promises.readdir(dir, { withFileTypes: true });
+    const dirs = [], imgs = [];
+    for (const d of ents) {
+      if (d.name.startsWith('.') || d.name.startsWith('$') || /^(system volume information|desktop\.ini|thumbs\.db)$/i.test(d.name)) continue;
+      if (d.isDirectory()) dirs.push({ name: d.name, path: path.join(dir, d.name), type: 'dir' });
+      else if (d.isFile() && IMG_EXT.test(d.name)) imgs.push({ name: d.name, path: path.join(dir, d.name), type: 'img' });
+    }
+    const by = (a, b) => a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' });
+    const entries = [...dirs.sort(by), ...imgs.sort(by)];
+    const parent = path.dirname(dir);
+    cfg.pickDir = dir;                                   // se recuerda la última carpeta (se guarda al aplicar una portada)
+    return { dir, parent: parent !== dir ? parent : null, entries: entries.slice(0, MAX_ENTRIES), more: Math.max(0, entries.length - MAX_ENTRIES) };
+  } catch { return { dir, error: 'No se puede abrir esta carpeta' }; }
+});
+// Miniatura con la caché de miniaturas de Windows (rápida aunque la foto pese mucho); si falla, se reduce a mano
+const thumbCache = new Map();
+ipcMain.handle('pickThumb', async (e, file) => {
+  file = String(file);
+  if (!IMG_EXT.test(file)) return null;
+  if (thumbCache.has(file)) return thumbCache.get(file);
+  let url = null;
+  try {
+    let img = await nativeImage.createThumbnailFromPath(file, { width: 360, height: 360 });
+    if (img.isEmpty()) throw 0;
+    url = img.toDataURL();
+  } catch {
+    try {
+      const img = nativeImage.createFromPath(file);
+      if (!img.isEmpty()) { const { width, height } = img.getSize(), k = Math.min(1, 360 / Math.max(width, height)); url = img.resize({ width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)) }).toJPEG(80).toString('base64'); url = 'data:image/jpeg;base64,' + url; }
+    } catch {}
+  }
+  if (thumbCache.size > 1500) thumbCache.delete(thumbCache.keys().next().value);
+  thumbCache.set(file, url);
+  return url;
+});
+ipcMain.handle('pickApply', (e, id, file) => {
+  file = String(file);
+  if (!IMG_EXT.test(file) || !fs.existsSync(file)) return null;
+  try {
+    fs.mkdirSync(coversDir(), { recursive: true });
+    fs.writeFileSync(coverFile(id), shrink(fs.readFileSync(file)));
+    (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano: "mejorar portadas" no la reemplaza
+    const g = lib.games.find(x => x.id === id);
+    if (g && g.cover !== coverFile(id)) { g.cover = coverFile(id); saveLib(); }
+    return coverUrl(coverFile(id));
+  } catch { return null; }
+});
+
 // ---------- Video de fondo ----------
 // Se elige en dos pasos para que la interfaz pueda avisar "Copiando…": el archivo se copia a la carpeta de datos
 // (sigue funcionando aunque muevas o borres el original). Solo se copia la ruta que salió del diálogo, nunca una que mande la interfaz.

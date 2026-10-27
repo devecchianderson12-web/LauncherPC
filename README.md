@@ -68,6 +68,16 @@ Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece d
 al moverte, vuelve el fondo de cintas. **Ajustes > Difuminado de la portada** regula cuánto se difumina (0 = nítida); mientras movés la barra
 se ve la portada del juego elegido para comparar.
 
+## Cambiar portada: explorador propio (C / △ / Y)
+En vez del diálogo chico de Windows se abre un explorador **a pantalla completa con cuadros grandes** (miniatura de cada imagen), pensado para verse de lejos.
+- Arriba, lugares rápidos: **Carpeta del juego**, Imágenes, Descargas, Escritorio, Documentos, los discos y **Explorador de Windows…** (el diálogo clásico, por si hace falta).
+  Abre en la última carpeta usada.
+- **Teclado**: flechas, Enter elige/abre, Retroceso sube de carpeta, Esc cierra, RePág/AvPág, Inicio/Fin.
+- **Mouse**: clic elige/abre, rueda para desplazarse, clic derecho = atrás.
+- **Mando**: cruceta/stick, aceptar elige/abre, atrás sube de carpeta (en la raíz cierra), △/Y cierra, L1/R1 pasan de página.
+- Desde la primera fila, arriba pasa a los lugares rápidos. Las miniaturas salen de la caché de Windows y solo se piden las que entran en pantalla (4 a la vez).
+- La portada elegida así cuenta como "elegida a mano": **Mejorar portadas** no la reemplaza.
+
 ## Tipo de fondo (Ajustes > Fondo)
 - **Fondo clásico**: las cintas de seda de siempre.
 - **Fondo original PS3**: recreación del fondo del XMB: degradado en diagonal, una ola fina de muchas hebras que se retuercen
