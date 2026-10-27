@@ -25,8 +25,10 @@ y permite añadir cualquier .exe con portada automática.
   del monitor (tope 52 fps) prueba solo otro modo (integrada, OpenGL, dedicada), se reinicia y se queda con el mejor. El resultado se guarda
   en `config.json` (`gpuMode`, `tune`).
 - **"soft" (sin GPU) es el último recurso**: solo se elige si ningún modo con GPU llega a 20 fps. Sin GPU el contador de fps no está atado
-  al monitor y da números altísimos, así que antes podía "ganarle" a la GPU y dejar todo borroso y lento. La 1.10.0 vuelve a probar una vez
-  a quien había quedado en "soft".
+  al monitor y da números altísimos, así que antes podía "ganarle" a la GPU y dejar todo borroso y lento.
+- Hasta la 1.10.0 la prueba daba por fallado cada modo nuevo **sin medirlo** (marcaba "pendiente" antes de reiniciar y el arranque
+  siguiente lo leía como un cuelgue), así que casi siempre terminaba en "gl" o "soft". Ahora "pendiente" se marca al arrancar el modo
+  y se borra cuando la interfaz carga. Al actualizar, la prueba se repite una vez desde el modo normal.
 - **Ajustes > Gráficos > Optimizar** repite la prueba (por ejemplo, tras cambiar de GPU o de drivers). Arranca siempre por el modo normal.
 - El fondo se dibuja con un shader a baja resolución y 30 fps, y se detiene con el fondo de portada, esperando un juego, con el launcher oculto o pausado.
 
@@ -109,7 +111,9 @@ que superan 1280x720**, con su resolución y de dónde salen. Solo busca para es
   e **imágenes grandes de la propia carpeta del juego** (primero las que se llaman cover, portada, poster, banner…).
   Ojo: **las portadas verticales de Steam/SteamGridDB llegan como mucho a 600x900**, así que las opciones HD son arte apaisado o capturas.
   Se comprueba el tamaño real de cada imagen.
-- **Juegos sueltos** (portables, instalados a mano, carpetas importadas): para buscarlos se usa el nombre de producto guardado en el .exe
+- **Juegos sueltos** (portables, instalados a mano, carpetas importadas): primero se busca su **appid de Steam en la propia carpeta**
+  (`steam_appid.txt`, `CPY.ini`, `steam_emu.ini`, `OnlineFix.ini`… con `AppID=`), que sirve aunque el juego ya no esté a la venta.
+  Si no hay, se usa el nombre de producto guardado en el .exe
   ("PES2021.exe" → "eFootball PES 2021") y los nombres del .exe y sus carpetas limpios (sin "Play", "Launcher", "SteamRIP.com", versiones…),
   con búsqueda aproximada en Steam ("III" = 3, los números tienen que coincidir). Lo mismo vale para las portadas normales.
   Los juegos que **no están o ya no están en Steam** (God of War III, PES 2021 retirado de la tienda…) solo aparecen en **SteamGridDB**:

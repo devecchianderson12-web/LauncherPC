@@ -31,24 +31,26 @@ const earlyCfgFile = path.join(app.getPath('userData'), 'config.json');
 let early = {};
 try { early = JSON.parse(fs.readFileSync(earlyCfgFile, 'utf8')); } catch {}
 (function pickGpuMode() {
-  const t = early.tune = early.tune || { done: false, tried: {} };
-  // Versiones anteriores podían quedarse en "soft" por error (comparaban sus fps sin límite con los de la GPU, y
-  // "Optimizar" daba por fallado el modo 'auto' sin probarlo): se vuelve a probar una vez con la regla nueva.
-  // Si la GPU de verdad no funciona, la prueba vuelve a terminar en "soft" sola.
-  if (early.tuneVer !== 2) {
-    if (early.gpuMode === 'soft') { early.gpuMode = 'auto'; early.tune = { done: false, tried: {} }; }
-    early.tuneVer = 2;
+  early.tune = early.tune || { done: false, tried: {} };
+  // Hasta la 1.10.0 la prueba daba por fallado cada modo nuevo sin medirlo (ver 'pending' abajo), así que casi todos
+  // quedaron en un modo malo ("soft" o "gl"). Se vuelve a probar una vez desde el modo normal, con la prueba arreglada.
+  if (early.tuneVer !== 3) {
+    early.gpuMode = 'auto'; early.tune = { done: false, tried: {} }; early.tuneVer = 3;
     try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
   }
   const tt = early.tune;
   let id = GPU_MODES.some(m => m.id === early.gpuMode) ? early.gpuMode : 'auto';
-  if (tt.pending) {         // el arranque anterior con este modo no llegó a cargar la interfaz: se descarta y se pasa al siguiente
-    tt.tried[id] = 0; tt.pending = false;
+  // 'pending' se marca AL ARRANCAR un modo en prueba y se borra cuando la interfaz carga (did-finish-load).
+  // Si al arrancar sigue marcado para este mismo modo, el arranque anterior se colgó o se cerró: ese modo falla.
+  // (Antes se marcaba justo antes de reiniciar, y el arranque siguiente lo leía como fallo sin probarlo.)
+  if (tt.pending && tt.pendingMode === id) {
+    tt.tried[id] = 0;
     const next = GPU_MODES.find(m => !(m.id in tt.tried));
     if (next) id = next.id; else { id = bestMode(tt.tried); tt.done = true; }
     early.gpuMode = id;
-    try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
   }
+  tt.pending = !tt.done; tt.pendingMode = tt.done ? undefined : id;
+  try { fs.writeFileSync(earlyCfgFile, JSON.stringify(early, null, 2)); } catch {}
   const m = GPU_MODES.find(x => x.id === id);
   if (m.soft) app.disableHardwareAcceleration(); else if (m.sw) app.commandLine.appendSwitch(...m.sw);
 })();
@@ -308,11 +310,37 @@ function nameScore(query, title) {
   if (nkey(title).includes(nkey(query))) hit = Math.max(hit, .9);
   return hit - Math.max(0, t.size - q.length) * .03;                                 // a igualdad, el título más corto
 }
+// Muchos juegos portables o "repacks" traen su appid de Steam en la carpeta: steam_appid.txt, CPY.ini, steam_emu.ini,
+// OnlineFix.ini… ("AppID=1259970"). Sirve aunque el juego ya no esté a la venta (la búsqueda de la tienda no lo encuentra)
+async function localSteamId(g) {
+  const dir = g.exe ? path.dirname(g.exe) : g.dir;
+  if (!dir || path.parse(path.resolve(dir)).root === path.resolve(dir)) return null;
+  const files = [];
+  const walk = async (d, depth) => {
+    let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const f = path.join(d, e.name);
+      if (e.isFile() && (/^steam_appid\.txt$/i.test(e.name) || /\.ini$/i.test(e.name))) files.push(f);
+      else if (e.isDirectory() && depth < 2 && /^(steam_settings|bin|binaries|win64|x64)$/i.test(e.name)) await walk(f, depth + 1);
+    }
+  };
+  await walk(dir, 0);
+  for (const f of files.sort((a, b) => /steam_appid/i.test(b) - /steam_appid/i.test(a))) {
+    try {
+      const t = (await fs.promises.readFile(f, 'utf8')).slice(0, 20000);
+      const m = /steam_appid\.txt$/i.test(f) ? /^\s*(\d{3,8})\s*$/m.exec(t) : /^\s*(?:real)?app_?id\s*=\s*(\d{3,8})\s*$/im.exec(t);
+      if (m && +m[1] > 10 && +m[1] !== 480) return +m[1];                         // 480 = "Spacewar", el appid de prueba
+    } catch {}
+  }
+  return null;
+}
 const steamFindCache = new Map();
 async function steamFind(g) {
   const key = g.id || g.name;
   if (steamFindCache.has(key)) return steamFindCache.get(key);
   const p = (async () => {
+    const own = await localSteamId(g).catch(() => null);
+    if (own) return own;
     for (const q of await gameNames(g)) {
       try {
         const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(q), { signal: AbortSignal.timeout(6000) })).json();
@@ -431,7 +459,7 @@ async function steamAppFor(g) {
 // Imágenes de la carpeta del juego que podrían servir de portada: primero las que se llaman cover/portada/poster/…
 // y después las más pesadas (las chicas son iconos o texturas). Se descartan las de más de 30 MB.
 async function localImages(dir) {
-  if (!dir) return [];
+  if (!dir || path.parse(path.resolve(dir)).root === path.resolve(dir) || GENERIC_DIR.test(path.basename(dir))) return [];   // nunca un disco entero ni "Juegos"
   const found = [];
   const walk = async (d, depth) => {
     let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
@@ -1009,7 +1037,7 @@ ipcMain.handle('perf', (e, p) => {
   const t = cfg.tune || (cfg.tune = { done: false, tried: {} });
   if (t.done || !isFinite(fps)) return { action: 'none' };
   const cur = cfg.gpuMode || 'auto';
-  t.tried[cur] = Math.round(fps); t.pending = false;
+  t.tried[cur] = Math.round(fps);
   const next = GPU_MODES.find(m => !(m.id in t.tried));
   // "Suficiente" = ~85 % de la frecuencia del monitor (con tope en 52): en un monitor de 50 Hz no se exigen 52 fps imposibles
   let hz = 60; try { hz = screen.getPrimaryDisplay().displayFrequency || 60; } catch {}
@@ -1017,11 +1045,11 @@ ipcMain.handle('perf', (e, p) => {
   if ((fps >= enough && cur !== 'soft') || !next || next.id === 'soft' && Object.entries(t.tried).some(([m, f]) => m !== 'soft' && f >= 20)) {
     const best = bestMode(t.tried);                          // suficiente, o ya se probaron todos los modos con GPU: el mejor
     t.done = true;
-    if (best !== cur) { cfg.gpuMode = best; t.pending = true; saveCfg(); relaunchApp(); return { action: 'restart', mode: best }; }
+    if (best !== cur) { cfg.gpuMode = best; saveCfg(); relaunchApp(); return { action: 'restart', mode: best }; }
     saveCfg();
     return { action: 'done', mode: cur, fps };
   }
-  cfg.gpuMode = next.id; t.pending = true; saveCfg(); relaunchApp();
+  cfg.gpuMode = next.id; saveCfg(); relaunchApp();                 // el arranque siguiente marca pending solo
   return { action: 'restart', mode: next.id };
 });
 // Sin 'pending': si no, el arranque siguiente daba por fallado el modo 'auto' sin probarlo y saltaba al siguiente
@@ -1272,7 +1300,7 @@ app.whenReady().then(() => {
 
   registerHotkey();
   win.webContents.once('did-finish-load', () => {
-    if (cfg.tune && cfg.tune.pending) { cfg.tune.pending = false; saveCfg(); }       // este modo gráfico arrancó bien
+    if (cfg.tune && cfg.tune.pending) { cfg.tune.pending = false; delete cfg.tune.pendingMode; saveCfg(); }   // este modo gráfico arrancó bien
     if (!process.argv.includes('--hidden')) showLauncher();
   });
   // Borra restos de una actualización fallida y comprueba si hay versión nueva (unos segundos después de abrir, y cada 6 h)
