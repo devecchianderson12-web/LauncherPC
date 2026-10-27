@@ -221,7 +221,8 @@
   #hd-msg small { display: block; font-size: .7em; opacity: .75; margin-top: calc(var(--u) * 14); }
   #hd-title { font-size: calc(var(--u) * 34); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hd-sub { font-size: calc(var(--u) * 22); opacity: .65; margin-top: calc(var(--u) * 6); }
-  #hd-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: calc(var(--u) * 18) calc(var(--u) * 24); align-items: stretch; }
+  #hd-cards { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: calc(var(--u) * 210); gap: calc(var(--u) * 18) calc(var(--u) * 20); align-content: start; padding: calc(var(--u) * 8); }
+  #hd-cards::-webkit-scrollbar { display: none; }
   .hd-c { display: flex; flex-direction: column; gap: calc(var(--u) * 6); min-height: 0; cursor: pointer; transition: transform .15s ease-out; }
   .hd-i { flex: 1; min-height: 0; border-radius: calc(var(--u) * 14); overflow: hidden; background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center;
     outline: calc(var(--u) * 4) solid transparent; outline-offset: calc(var(--u) * 5); transition: outline-color .12s; }
@@ -1040,7 +1041,7 @@ async function changeCover() {
   if (!it || it.type === 'add' || it.type === 'cfg' || pickerOpen()) return;
   hideArt();
   const r = await window.api.pickPlaces(it.id);
-  pk = { item: it, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: [...r.places, { name: 'Buscar en Google…', google: true }, { name: 'Explorador de Windows…', win: true }] };
+  pk = { item: it, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: [...r.places, { name: 'Explorador de Windows…', win: true }] };
   $('#pk-title').textContent = 'Portada: ' + it.name;
   pkPlaces.innerHTML = '';
   pk.places.forEach((p, k) => {
@@ -1123,7 +1124,6 @@ async function pkActivate() {
   if (!pk) return;
   if (pk.zone === 'places') {
     const p = pk.places[pk.pi];
-    if (p.google) { const it = pk.item; closePicker(); window.api.googleCover(it.id); return; }
     if (p.win) {                                               // el diálogo clásico de Windows, por si hace falta
       const it = pk.item, url = await window.api.setCover(it.id);
       if (url) { setCoverUrl(it, url); closePicker(); toast('Portada cambiada'); }
@@ -1154,7 +1154,7 @@ function pkHint() {
   $('#pk-foot').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('') + (gp ? '' : '<span class="hk">Clic derecho: atrás</span>');
 }
 // ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
-// Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 9 portadas (3x3) de internet o de su carpeta
+// Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 50 portadas (5 columnas con scroll) de internet o de su carpeta
 // de 600x900 o más (nunca menos). Aceptar aplica la marcada · atrás / △ / Esc cierra. Sin resultados ofrece buscar en el PC.
 const hdEl = $('#hdpick'), hdCards = $('#hd-cards');
 const hdOpen = () => hdEl.classList.contains('open');
@@ -1182,15 +1182,15 @@ async function upgradeCovers() {
   hd.opts.forEach((o, i) => {
     const c = document.createElement('div'); c.className = 'hd-c';
     c.innerHTML = `<div class="hd-i"><img alt=""></div><div class="hd-l">${o.w}x${o.h} · ${o.src}</div>`;
-    c.querySelector('img').src = o.preview;
+    const im = c.querySelector('img'); im.loading = 'lazy'; im.decoding = 'async'; im.src = o.preview;
     c.onclick = () => { hd.f = i; hdChoose(); };
     c.onmousemove = () => { if (hd && hd.f !== i) { hd.f = i; hdMark(); } };
     hdCards.appendChild(c);
   });
   hdMark();
 }
-function hdMark() { [...hdCards.children].forEach((c, i) => c.classList.toggle('f', i === hd.f)); }
-// Cuadrícula de 3x3: izquierda/derecha de a uno, arriba/abajo de a una fila (3)
+function hdMark() { [...hdCards.children].forEach((c, i) => c.classList.toggle('f', i === hd.f)); hdCards.children[hd.f]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+// Cuadrícula de 5 columnas con scroll: izquierda/derecha de a uno, arriba/abajo de a una fila (5)
 function hdMove(d) { if (hd && hd.opts.length) { const n = hd.f + d; if (n >= 0 && n < hd.opts.length) { hd.f = n; hdMark(); } } }
 async function hdChoose() {
   if (!hd || hd.busy) return;
@@ -1212,14 +1212,15 @@ function hdClose(quiet) {
   armArt();
 }
 function hdHint() {
-  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc', remove: 'G' };
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc', remove: 'C' };
   const okTxt = hd && hd.none ? 'buscar en mi PC' : 'aplicar';
-  $('#hd-foot').innerHTML = `<span class="hk" data-a="ok">${glyph(L.ok, k)}${okTxt}</span><span class="hk" data-a="google">${glyph(L.remove, k)}buscar en Google</span>` +
-    `<span class="hk" data-a="end">${glyph(L.back, k)}cerrar</span>` + (hd && hd.none ? '' : '<span class="hk">flechas: elegir · 1-9: directo</span>');
+  $('#hd-foot').innerHTML = `<span class="hk" data-a="ok">${glyph(L.ok, k)}${okTxt}</span>` +
+    (hd && hd.none ? '' : `<span class="hk" data-a="pc">${glyph(L.remove, k)}buscar en mi PC</span>`) +
+    `<span class="hk" data-a="end">${glyph(L.back, k)}cerrar</span>` + (hd && hd.none ? '' : '<span class="hk">flechas: elegir</span>');
 }
-// Google Imágenes en una ventana del launcher (el usuario elige con clic derecho → "Usar esta imagen como portada")
-function hdGoogle() { if (!hd) return; const it = hd.it; hdClose(); window.api.googleCover(it.id); }
-$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'google') hdGoogle(); else if (a === 'end') hdClose(); });
+// Acceso al explorador de portadas (el de la tecla C) para elegir una imagen propia
+function hdPc() { if (!hd) return; const it = hd.it; hdClose(); go(items.indexOf(it)); changeCover(); }
+$('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'pc') hdPc(); else if (a === 'end') hdClose(); });
 hdEl.addEventListener('click', e => { if (e.target === hdEl) hdClose(); });            // clic fuera de la ventana = cerrar
 hdEl.addEventListener('contextmenu', e => { e.preventDefault(); hdClose(); });
 async function removeCurrent() {
@@ -1550,13 +1551,12 @@ addEventListener('keydown', e => {
   if (hdOpen()) {
     if (k === 'ArrowRight') hdMove(1);
     else if (k === 'ArrowLeft') hdMove(-1);
-    else if (k === 'ArrowDown') hdMove(3);
-    else if (k === 'ArrowUp') hdMove(-3);
+    else if (k === 'ArrowDown') hdMove(5);
+    else if (k === 'ArrowUp') hdMove(-5);
     else if (k === 'Enter') hdChoose();
     else if (k === 'Backspace') hdClose();
-    else if (k.toLowerCase() === 'g') hdGoogle();
+    else if (k.toLowerCase() === 'c') hdPc();
     else if (k === 'Escape') hdClose();
-    else if (k >= '1' && k <= '9' && hd && +k <= hd.opts.length) { hd.f = +k - 1; hdMark(); hdChoose(); }
     e.preventDefault();
     return;
   }
@@ -1713,9 +1713,9 @@ function poll() {
   if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
   const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
   if (hdOpen()) {
-    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose); edge('remove', on('remove'), hdGoogle);
+    edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose); edge('remove', on('remove'), hdPc);
     repH(on('right') ? 1 : on('left') ? -1 : 0, now, hdMove);
-    repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => hdMove(d * 3));
+    repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => hdMove(d * 5));
     return;
   }
   if (pickerOpen()) {

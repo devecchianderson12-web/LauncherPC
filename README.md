@@ -117,26 +117,23 @@ La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ �
 - **Colores**: como el mando detectado. Xbox con A verde, B roja, X azul, Y amarilla; PlayStation con los símbolos de color sobre negro;
   Nintendo y genéricos en oscuro; las teclas en claro.
 
-## Buscar portada en Google (G en la ventana de P, X/□ en el mando, o "Buscar en Google…" en el explorador de C)
-Abre **Google Imágenes dentro del launcher** con la búsqueda hecha (`<nombre del juego> wallpaper`, imágenes grandes y horizontales).
-Hacé clic en una imagen para verla grande y después **clic derecho → "Usar esta imagen como portada"**: se descarga, se guarda
-y la ventana se cierra. Esc cierra. Se maneja con el mouse. **Solo se aceptan imágenes de 600x900 o más**: si la del clic derecho es
-más chica (por ejemplo, la miniatura de la grilla), avisa el tamaño y no la aplica; hay que abrirla grande primero.
-- No se lee ni se modifica la página de Google: solo se usa la dirección de la imagen del clic derecho. Sesión aparte (`persist:google`),
-  solo deja navegar por Google y bloquea ventanas nuevas.
-- Si Google pide verificar que no sos un robot, se resuelve a mano en esa ventana (queda guardado en esa sesión).
-
 ## Portada en HD (tecla P / LT · L2 · ZL)
-Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 9 portadas
-de 600x900 o más** (nunca menos: 600 de ancho y 900 de alto como mínimo), en una cuadrícula de 3x3, con su resolución y de dónde salen.
-Una portada actual por debajo de 600x900 cuenta como "baja". Solo busca para ese juego.
-- **Flechas / cruceta**: izquierda-derecha de a una, arriba-abajo de a una fila · **Aceptar / Enter / clic**: aplica la marcada ·
-  **1 a 9**: esa opción directo · **Atrás / Esc / clic derecho / clic fuera**: cierra.
-- Orden de las fuentes: portada vertical de Steam (600x900), arte principal de Steam (3840x1240), portadas y banners de SteamGridDB
-  (con clave), hasta 12 capturas de Steam (1920x1080) e **imágenes grandes de la propia carpeta del juego** (primero las que se llaman
-  cover, portada, poster, banner…). Se descargan de a 4 (≈1 s por juego) y se comprueba el **tamaño real** de cada una: lo que no llega
-  a 600x900 se descarta. Ojo: en el CDN de Steam `library_600x900.jpg` mide 300x450; la de 600x900 es `library_600x900_2x.jpg`
-  (también se usa primero para las portadas automáticas).
+Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 50 portadas
+de 600x900 o más** (nunca menos: 600 de ancho y 900 de alto como mínimo), en una cuadrícula de 5 columnas con scroll, con su resolución
+y de dónde salen. Una portada actual por debajo de 600x900 cuenta como "baja". Solo busca para ese juego.
+- **Flechas / cruceta**: izquierda-derecha de a una, arriba-abajo de a una fila (la cuadrícula se desplaza sola) · **Aceptar / Enter / clic**:
+  aplica la marcada · **C / X·□ del mando / "buscar en mi PC"**: abre el explorador de portadas (el de la tecla C) para elegir una imagen
+  propia · **Atrás / Esc / clic derecho / clic fuera**: cierra.
+- Fuentes, en orden: portada vertical de Steam (600x900), arte principal de Steam (3840x1240), portadas y banners de **SteamGridDB**
+  (con clave en Ajustes: es donde hay decenas de opciones por juego, también de juegos que no están en Steam), todas las capturas de
+  Steam (1920x1080) e **imágenes grandes de la propia carpeta del juego** (primero las que se llaman cover, portada, poster, banner…).
+  Sin clave de SteamGridDB suelen salir entre 5 y 15 (lo que tenga Steam).
+- Se muestran **miniaturas**; el **tamaño real** de cada imagen se lee de su cabecera (los primeros KB, sin bajarla entera) y lo que no
+  llega a 600x900 se descarta. La imagen completa se baja recién al elegirla y se vuelve a comprobar el tamaño.
+  Ojo: en el CDN de Steam `library_600x900.jpg` mide 300x450; la de 600x900 es `library_600x900_2x.jpg` (también se usa primero para las
+  portadas automáticas).
+- **Google**: su API oficial de imágenes (Programmable Search / Custom Search JSON API) ya no acepta clientes nuevos y se apaga el
+  1/1/2027, y leer la página de Google Imágenes va contra sus términos (y pide captcha), así que no hay opciones de Google.
 - Si no hay ninguna, aceptar abre el explorador de portadas (**buscar en mi PC**).
 - **Juegos sueltos** (portables, instalados a mano, carpetas importadas): primero se busca su **appid de Steam en la propia carpeta**
   (`steam_appid.txt`, `CPY.ini`, `steam_emu.ini`, `OnlineFix.ini`… con `AppID=`), que sirve aunque el juego ya no esté a la venta.
