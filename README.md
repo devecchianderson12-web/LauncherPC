@@ -42,8 +42,11 @@ y permite añadir cualquier .exe con portada automática.
 Pulsa **S** (o LB en el mando) para buscar juegos nuevos: ahí se escanea Steam/Epic y se descargan las portadas que falten
 (también las de los juegos que añadas con **+** o desde una carpeta). La primera vez, pulsa S.
 
-## Diseños: PS4, Centrado y PS3
-La tecla **L** (o R1/RB en el mando) va rotando entre los tres, y también se elige en **Ajustes > Diseño**.
+## Diseños: PS4, Centrado, PS3 y Steam
+La tecla **L** (o R1/RB en el mando) va rotando entre los cuatro, y también se elige en **Ajustes > Diseño**.
+- **Steam** (como el modo Big Picture): fila de portadas verticales con la elegida **ancha** (en los juegos de Steam, su banner
+  `library_hero`), barra azul abajo, nombre y "Jugado hace…" debajo, y una fila de **Recientes** en tarjetas apaisadas
+  (clic = jugar). Solo cambia la interfaz: el fondo es el que esté elegido. Pasar a o desde Steam hace un fundido.
 - **PS3 (XMB)**: fondo morado con las cintas de seda; categorías en horizontal (**Juegos**, **Recientes**, **Herramientas** con Añadir y Buscar juegos,
   y **Ajustes**) y la lista de la categoría elegida en vertical. **Izquierda/derecha** cambia de categoría y **arriba/abajo** de elemento (también con la
   cruceta, el stick o la rueda del ratón). Recientes se ordena por último jugado y las categorías vacías no se muestran. Cada categoría recuerda en qué fila

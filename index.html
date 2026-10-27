@@ -86,6 +86,39 @@
   body.ps3 #bg { background: linear-gradient(180deg, #6b76ac 0%, #5b3f84 100%); }
   body.ps3.nobg #bg { background: #5a4a8a; }
   body.ps3 #tiles, body.ps3 #strip, body.ps3 #frame, body.ps3 #title, body.ps3 #recent { display: none; }
+
+  /* Diseño Steam (como el modo Big Picture): fila de portadas verticales y la elegida ancha (con su banner), nombre y última vez
+     jugado debajo, y una fila de recientes en tarjetas apaisadas. Posiciones en unidades de 1920x1080, todo con transform. */
+  #steam { position: absolute; inset: 0; display: none; }
+  body.steam #steam { display: block; }
+  body.steam #tiles, body.steam #strip, body.steam #frame, body.steam #title, body.steam #recent { display: none; }
+  .sc { position: absolute; left: 0; top: 0; height: calc(var(--u) * 370); border-radius: calc(var(--u) * 6); overflow: hidden; cursor: pointer;
+    background: linear-gradient(160deg, #2a475e, #1b2838); will-change: transform; transform-origin: 0 0;
+    transition: transform .28s cubic-bezier(.22,.8,.24,1), width .28s cubic-bezier(.22,.8,.24,1), box-shadow .2s; }
+  #st-row.inst .sc { transition: none; }
+  .sc img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; pointer-events: none; }
+  .sc .hero { opacity: 0; transition: opacity .3s; }
+  .sc.sel .hero.ok { opacity: 1; }
+  .sc .scn { position: absolute; left: calc(var(--u) * 16); right: calc(var(--u) * 16); bottom: calc(var(--u) * 14); font-size: calc(var(--u) * 24);
+    line-height: 1.15; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+  .sc.has .scn { display: none; }
+  .sc.sp { display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 110); font-weight: 200; font-family: "Segoe UI Symbol", "Segoe UI", sans-serif; }
+  .sc.sel { box-shadow: 0 0 0 calc(var(--u) * 3) rgba(255,255,255,.85), 0 calc(var(--u) * 12) calc(var(--u) * 40) rgba(0,0,0,.55); }
+  .sc .bar { position: absolute; left: calc(var(--u) * 6); right: calc(var(--u) * 6); bottom: calc(var(--u) * 6); height: calc(var(--u) * 4); border-radius: 2px;
+    background: #1a9fff; opacity: 0; transition: opacity .25s; }
+  .sc.sel .bar { opacity: 1; }
+  #st-info { position: absolute; left: calc(var(--u) * 45); top: calc(var(--u) * 524); }
+  #st-name { font: 600 calc(var(--u) * 30) "Segoe UI", sans-serif; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+  #st-sub { font: 600 calc(var(--u) * 17) "Segoe UI", sans-serif; letter-spacing: .06em; opacity: .65; margin-top: calc(var(--u) * 6); text-transform: uppercase; }
+  #st-tabs { position: absolute; left: 0; right: 0; top: calc(var(--u) * 630); display: flex; justify-content: center; gap: calc(var(--u) * 30); font: 600 calc(var(--u) * 18) "Segoe UI", sans-serif; letter-spacing: .05em; }
+  #st-tabs span { padding: calc(var(--u) * 10) calc(var(--u) * 24); border-radius: calc(var(--u) * 30); }
+  #st-tabs span.on { background: rgba(255,255,255,.14); }
+  #st-rec { position: absolute; left: calc(var(--u) * 56); right: 0; top: calc(var(--u) * 712); display: flex; gap: calc(var(--u) * 16); overflow: hidden; }
+  .sr { flex: none; width: calc(var(--u) * 430); cursor: pointer; }
+  .sr .si { height: calc(var(--u) * 240); border-radius: calc(var(--u) * 6); overflow: hidden; background: linear-gradient(160deg, #2a475e, #1b2838); position: relative; }
+  .sr .si img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; }
+  .sr .sl { font: 600 calc(var(--u) * 15) "Segoe UI", sans-serif; letter-spacing: .05em; opacity: .65; margin-top: calc(var(--u) * 10); text-transform: uppercase; }
+  .sr .sn { font-size: calc(var(--u) * 21); margin-top: calc(var(--u) * 2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #xmb { position: absolute; inset: 0; display: none; }
   body.ps3 #xmb { display: block; }
   .xc, .xr { position: absolute; left: 0; top: 0; will-change: transform; transition: transform .3s cubic-bezier(.22,.8,.24,1); }
@@ -258,6 +291,8 @@
   <div id="frame"></div>
   <div id="title"></div>
   <div id="xmb"><div id="xcats"></div><div id="xlist"></div></div>
+  <div id="steam"><div id="st-row"></div><div id="st-info"><div id="st-name"></div><div id="st-sub"></div></div>
+    <div id="st-tabs"><span class="on">RECIENTES</span></div><div id="st-rec"></div></div>
 </div>
 
 <div id="recent"><h2>Recientes</h2><div id="rlist"></div></div>
@@ -283,7 +318,7 @@
 
 <div id="settings"><div class="panel">
   <div class="row"><span id="gfxinfo">Gráficos</span><button class="btn" id="b-tune">Optimizar</button></div>
-  <div class="row"><span>Diseño</span><div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button><button class="btn" id="b-ps3">PS3</button></div></div>
+  <div class="row"><span>Diseño</span><div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button><button class="btn" id="b-ps3">PS3</button><button class="btn" id="b-steam">Steam</button></div></div>
   <div class="row"><span>Fondo</span><div class="btns"><button class="btn" id="b-bgvid">Subir video</button><button class="btn" id="b-bgcls">Fondo clásico</button><button class="btn" id="b-bgps3">Fondo original PS3</button></div></div>
   <div class="row"><span>Fondo PS3</span><div class="btns"><button class="btn" id="b-psh">Alta definición</button><button class="btn" id="b-psv">Video original</button></div></div>
   <div class="row"><span id="sharpinfo">Nitidez del fondo</span><button class="btn sm" id="b-shm">−</button><input type="range" id="sharp" min="25" max="100" step="5" value="100"><button class="btn sm" id="b-shp">+</button></div>
@@ -318,7 +353,8 @@ const CFG = { id: '_cfg', type: 'cfg', name: 'Ajustes' };
 const L = {
   ps3:    { bw: 342, bh: 342, ss: 1,    so: 200 / 342, gap: 8,  anchor: 279,  top: 208, valign: 'top',    extra: 0 },   // solo para que el resto del código tenga datos; el PS3 se dibuja en #xmb
   ps4:    { bw: 342, bh: 342, ss: 1,    so: 200 / 342, gap: 8,  anchor: 279,  top: 208, valign: 'top',    extra: 66 },
-  center: { bw: 220, bh: 330, ss: 1.22, so: 1,         gap: 34, anchor: null, cy: 470,  valign: 'center', extra: 0 }
+  center: { bw: 220, bh: 330, ss: 1.22, so: 1,         gap: 34, anchor: null, cy: 470,  valign: 'center', extra: 0 },
+  steam:  { bw: 342, bh: 342, ss: 1,    so: 200 / 342, gap: 8,  anchor: 279,  top: 208, valign: 'top',    extra: 0 }    // solo para el resto del código; el Steam se dibuja en #steam
 };
 const VIS = 8;   // solo se dibujan las baldosas a ±8 de la selección; el resto no existe para el compositor
 
@@ -649,6 +685,7 @@ function layoutBox() {
 // Calcula el destino de cada baldosa; la animación la hace la transición CSS (una sola escritura por pulsación, nada por fotograma)
 function place(instant) {
   if (layout === 'ps3') { xmbFollow(instant); return; }
+  if (layout === 'steam') { stPlace(instant); return; }
   const { c, sw, ow, ax } = layoutBox(), first = sw + c.gap, step = ow + c.gap, box = $('#tiles');
   if (instant) box.classList.add('inst');
   for (let i = 0; i < tiles.length; i++) {
@@ -840,7 +877,7 @@ function xmbMove(dx, dy) {
 }
 // Flechas y cruceta: en PS3 mueven en las dos direcciones; en los demás diseños solo izquierda/derecha
 function step(dx, dy) { if (layout === 'ps3') xmbMove(dx, dy); else if (dx) go(sel + dx); }
-const nextLayout = () => ({ ps4: 'center', center: 'ps3', ps3: 'ps4' }[layout] || 'ps4');
+const nextLayout = () => ({ ps4: 'center', center: 'ps3', ps3: 'steam', steam: 'ps4' }[layout] || 'ps4');
 let wheelAt = 0;
 addEventListener('wheel', e => {
   if (layout !== 'ps3' || settingsOpen() || pickerOpen() || hdOpen() || launching || !e.deltaY) return;
@@ -871,7 +908,7 @@ function buildTile(it, i) {
         art.querySelectorAll('img').forEach(x => x.remove()); art.appendChild(img);
         if (instant) { img.classList.add('now', 'in'); ph.style.display = 'none'; }
         else { void img.offsetWidth; img.classList.add('in'); setTimeout(() => { ph.style.display = 'none'; }, 330); }
-        updateRecent(); xmbCovers(it.id);
+        updateRecent(); xmbCovers(it.id); stCovers(it.id);
         if (tiles[sel] === t) armArt();
       };
       img.src = url;
@@ -888,7 +925,7 @@ function render() {
   const frag = document.createDocumentFragment();
   items.forEach((it, i) => { const t = buildTile(it, i); frag.appendChild(t); tiles.push(t); });
   box.appendChild(frag);
-  sizeTiles(); if (layout === 'ps3') xmbBuild(); else place(true);
+  sizeTiles(); if (layout === 'ps3') xmbBuild(); else if (layout === 'steam') stBuild(); else place(true);
   updateInfo(); updateRecent(); armArt();
 }
 
@@ -903,7 +940,82 @@ async function load(force) {
     const k = items.findIndex(g => g.id === curId);
     sel = k >= 0 ? k : 0;
     render();
-  } else { updateInfo(); if (layout === 'ps3') xmbBuild(); }   // los recientes cambian aunque la lista de juegos no
+  } else { updateInfo(); if (layout === 'ps3') xmbBuild(); if (layout === 'steam') stRecent(); }   // los recientes cambian aunque la lista de juegos no
+}
+
+// ---------- Diseño Steam (como el modo Big Picture) ----------
+// Fila propia (#st-row): la elegida es ancha y las demás verticales. Las tarjetas son absolutas y se mueven con transform;
+// solo cambia el ancho de la que entra y la que sale. Los juegos de Steam muestran su banner ancho (library_hero) al elegirlos.
+const ST = { top: 135, h: 370, ww: 805, pw: 247, gap: 12, ax: 45 };   // unidades de 1920x1080
+let stEls = [];
+const heroUrl = it => it.type === 'steam' && it.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${it.appid}/library_hero.jpg` : null;
+const ago = t => {
+  const m = (Date.now() - t) / 60000;
+  if (m < 60) return 'hace ' + Math.max(1, Math.round(m)) + ' min';
+  if (m < 1440) return 'hace ' + Math.round(m / 60) + ' h';
+  const d = Math.round(m / 1440); return d === 1 ? 'ayer' : 'hace ' + d + ' días';
+};
+function stCover(c, it) {
+  c.querySelectorAll('img.cv').forEach(x => x.remove());
+  if (!covers[it.id]) return;
+  const im = new Image(); im.className = 'cv'; im.draggable = false; im.decoding = 'async'; im.src = covers[it.id];
+  c.insertBefore(im, c.firstChild); c.classList.add('has');
+}
+function stHero(c) {                                           // el banner ancho se pide recién la primera vez que se elige
+  if (c._hero !== undefined) return;
+  const url = heroUrl(c._it); c._hero = url;
+  if (!url) return;
+  const im = new Image(); im.className = 'hero'; im.draggable = false; im.decoding = 'async';
+  im.onload = () => im.classList.add('ok');
+  im.src = url; c.insertBefore(im, c.querySelector('.bar'));
+}
+function stCard(it, i) {
+  const c = document.createElement('div'); c.className = 'sc'; c._it = it;
+  if (it.type === 'add' || it.type === 'cfg') { c.classList.add('sp'); c.textContent = it.type === 'add' ? '+' : '⚙'; }
+  else { const n = document.createElement('div'); n.className = 'scn'; n.textContent = it.name; c.appendChild(n); stCover(c, it); }
+  const bar = document.createElement('div'); bar.className = 'bar'; c.appendChild(bar);
+  c.onclick = () => { if (i === sel) activate(); else go(i); };
+  return c;
+}
+function stBuild() {
+  const row = $('#st-row'); row.textContent = ''; stEls = [];
+  const frag = document.createDocumentFragment();
+  items.forEach((it, i) => { const c = stCard(it, i); frag.appendChild(c); stEls.push(c); });
+  row.appendChild(frag);
+  stRecent(); stPlace(true);
+}
+function stCovers(id) { stEls.forEach(c => { if (c._it.id === id && !c.classList.contains('sp')) stCover(c, c._it); }); if (layout === 'steam') stRecent(); }
+function stPlace(instant) {
+  const row = $('#st-row'); if (instant) row.classList.add('inst');
+  for (let i = 0; i < stEls.length; i++) {
+    const c = stEls[i], d = i - sel;
+    const x = d === 0 ? ST.ax : d > 0 ? ST.ax + ST.ww + ST.gap + (d - 1) * (ST.pw + ST.gap) : ST.ax + d * (ST.pw + ST.gap);
+    if (x < -ST.ww || x > 1920 + ST.pw) { if (c._on !== false) { c._on = false; c.style.display = 'none'; } continue; }   // fuera de pantalla
+    if (c._on !== true) { c._on = true; c.style.display = ''; }
+    c.style.width = (d === 0 ? ST.ww : ST.pw) * u + 'px';
+    c.style.transform = `translate3d(${(x * u).toFixed(1)}px, ${(ST.top * u).toFixed(1)}px, 0)`;
+    c.classList.toggle('sel', d === 0);
+    if (d === 0) stHero(c);
+  }
+  if (instant) { void row.offsetWidth; row.classList.remove('inst'); }
+  const it = items[sel];
+  if (it) { $('#st-name').textContent = it.name; $('#st-sub').textContent = it.last ? 'Jugado ' + ago(it.last) : (SUB[it.type] || ''); }
+}
+// Fila de abajo: los últimos juegos jugados en tarjetas apaisadas (banner si es de Steam, si no la portada)
+function stRecent() {
+  const box = $('#st-rec'); box.textContent = '';
+  const list = items.filter(g => g.last).sort((a, b) => b.last - a.last).slice(0, 5);
+  $('#st-tabs').style.visibility = list.length ? 'visible' : 'hidden';
+  list.forEach(g => {
+    const r = document.createElement('div'); r.className = 'sr';
+    const si = document.createElement('div'); si.className = 'si';
+    const src = heroUrl(g) || covers[g.id];
+    if (src) { const im = new Image(); im.draggable = false; im.decoding = 'async'; im.src = src; if (heroUrl(g)) im.onerror = () => { if (covers[g.id]) im.src = covers[g.id]; }; si.appendChild(im); }
+    const sl = document.createElement('div'); sl.className = 'sl'; sl.textContent = 'Jugado ' + ago(g.last);
+    const sn = document.createElement('div'); sn.className = 'sn'; sn.textContent = g.name;
+    r.append(si, sl, sn); r.onclick = () => launchGame(g);
+    box.appendChild(r);
+  });
 }
 
 // ---------- Info y recientes ----------
@@ -1238,10 +1350,11 @@ const settingsOpen = () => settings.classList.contains('open');
 function applyLayout(l) {
   layout = l;
   if (sel < 0) sel = 0;
-  document.body.classList.remove('ps4', 'center', 'ps3'); document.body.classList.add(l);
-  $('#b-ps4').classList.toggle('on', l === 'ps4'); $('#b-center').classList.toggle('on', l === 'center'); $('#b-ps3').classList.toggle('on', l === 'ps3');
+  document.body.classList.remove('ps4', 'center', 'ps3', 'steam'); document.body.classList.add(l);
+  $('#b-ps4').classList.toggle('on', l === 'ps4'); $('#b-center').classList.toggle('on', l === 'center'); $('#b-ps3').classList.toggle('on', l === 'ps3'); $('#b-steam').classList.toggle('on', l === 'steam');
   Wave.theme(l === 'ps3' ? 1 : 0);
   if (l === 'ps3') xmbBuild();
+  if (l === 'steam') stBuild();
   sizeTiles(); placeStatic(); place(true);
 }
 const LEASE = 'cubic-bezier(.22,.8,.24,1)';
@@ -1270,6 +1383,20 @@ function morphTiles(l) {
   if (l === 'ps4') rc.animate([{ opacity: 0, translate: '40px 0' }, { opacity: 1, translate: '0 0' }], { duration: 400, delay: 200, easing: LEASE, fill: 'backwards' });
 }
 let layoutSeq = 0, layoutPending = null, layoutOuts = [];
+// Hacia o desde el diseño Steam: el actual se desvanece y el nuevo entra subiendo apenas
+async function morphFade(l) {
+  const seq = ++layoutSeq; layoutPending = l;
+  const sel_ = d => (d === 'steam' ? ['#steam'] : d === 'ps3' ? ['#xmb'] : ['#tiles', '#strip', '#frame', '#title', '#recent']).map($);
+  const outs = sel_(layout).map(e => e.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-in', fill: 'forwards' }));
+  layoutOuts = outs;
+  try { await Promise.all(outs.map(a => a.finished)); } catch {}
+  outs.forEach(a => a.cancel());
+  if (seq !== layoutSeq) return;
+  layoutPending = null;
+  applyLayout(l);
+  sel_(l).forEach(e => e.animate([{ opacity: 0, translate: '0 20px' }, { opacity: 1, translate: '0 0' }], { duration: 320, easing: XEASE, fill: 'backwards' }));
+  if (l === 'ps3') xmbEnter(1);
+}
 async function morphViaXmb(l) {
   const seq = ++layoutSeq; layoutPending = l;
   const to3 = l === 'ps3';
@@ -1298,7 +1425,8 @@ function setLayout(l, save = true) {
   if (l === layoutPending) return;
   window.api.setCfg({ layout: l });
   if (document.body.classList.contains('paused') || launching) { layoutSeq++; layoutPending = null; layoutOuts.forEach(a => a.cancel()); layoutOuts = []; applyLayout(l); return; }
-  if (layout === 'ps3' || l === 'ps3') morphViaXmb(l);
+  if (layout === 'steam' || l === 'steam') morphFade(l);
+  else if (layout === 'ps3' || l === 'ps3') morphViaXmb(l);
   else { layoutSeq++; layoutPending = null; layoutOuts.forEach(a => a.cancel()); layoutOuts = []; morphTiles(l); }
 }
 function setBg(on, save = true) {
@@ -1487,6 +1615,7 @@ window.api.onUpdProgress(p => {
 $('#b-ps4').onclick = () => setLayout('ps4');
 $('#b-ps3').onclick = () => setLayout('ps3');
 $('#b-center').onclick = () => setLayout('center');
+$('#b-steam').onclick = () => setLayout('steam');
 $('#b-bgon').onclick = () => setBg(true);
 $('#b-bgoff').onclick = () => setBg(false);
 $('#b-aton').onclick = () => setAuto(true);
@@ -1895,7 +2024,7 @@ window.api.onResume(() => {
   const c = await window.api.getCfg();
   curVer = c.version; updUI();
   $('#uname').textContent = c.user; $('#avatar').textContent = (c.user[0] || '?').toUpperCase();
-  setLayout(c.layout === 'center' || c.layout === 'ps3' ? c.layout : 'ps4', false);
+  setLayout(['center', 'ps3', 'steam'].includes(c.layout) ? c.layout : 'ps4', false);
   bgHex = /^#[0-9a-f]{6}$/i.test(c.bgColor) ? c.bgColor : bgHex;
   Tint.set({ mode: c.bgMode || 'default', hex: bgHex, speed: Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30 });
   $('#spd').value = Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30;

@@ -1295,7 +1295,7 @@ ipcMain.handle('useVideo', async () => {
 ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgSharp: Number.isFinite(cfg.bgSharp) ? cfg.bgSharp : 100, bgBlur: Number.isFinite(cfg.bgBlur) ? cfg.bgBlur : 0, ps3Src: cfg.ps3Src || 'hd', bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
-  if (patch.layout === 'ps4' || patch.layout === 'center' || patch.layout === 'ps3') cfg.layout = patch.layout;
+  if (['ps4', 'center', 'ps3', 'steam'].includes(patch.layout)) cfg.layout = patch.layout;
   if (typeof patch.bg === 'boolean') cfg.bg = patch.bg;
   if (typeof patch.autostart === 'boolean') cfg.autostart = patch.autostart;
   if (typeof patch.minimized === 'boolean') cfg.minimized = patch.minimized;
