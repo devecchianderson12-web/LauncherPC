@@ -1,7 +1,7 @@
 {
   "name": "ps-launcher",
   "productName": "PS Launcher",
-  "version": "0.1.0",
+  "version": "1.5.0",
   "description": "Launcher de juegos con interfaz estilo PS4",
   "main": "main.js",
   "scripts": {
@@ -27,5 +27,6 @@
       "icon": "assets/icon.png",
       "artifactName": "PS-Launcher.${ext}"
     }
-  }
+  },
+  "updateRepo": "devecchianderson12-web/LauncherPC"
 }

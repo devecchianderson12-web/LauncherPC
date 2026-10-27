@@ -4,7 +4,7 @@ Launcher estilo PS4 para Windows. Detecta juegos de Steam (todas las bibliotecas
 y permite añadir cualquier .exe con portada automática.
 
 - `npm install` y `npm start` para probar. `npm run dist` genera **`dist/PS-Launcher.exe`**: un único .exe portable, sin instalador. Cópialo donde quieras y ábrelo.
-- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, **S (buscar juegos nuevos)**, C (portada), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
+- Atajo global: Ctrl+Alt+P. Teclado: flechas, Enter, **S (buscar juegos nuevos)**, C (portada), P (mejorar portadas), L (diseño PS4/centrado), Supr (quitar), F (contador de fps), Esc.
 - **Mando (Xbox, PlayStation, Nintendo y cualquier mando estándar)**: se detecta solo y la ayuda de arriba muestra los botones del último
   dispositivo que uses (✕ ○ □ △ / L1 R1 en PlayStation, A B X Y / LB RB en Xbox, A B X Y / L R en Nintendo, donde A es el botón derecho).
   Aceptar jugar, atrás cerrar, cuadrado/X quitar, triángulo/Y portada, L1/LB buscar juegos, R1/RB cambia de diseño; cruceta o stick izquierdo para moverte.
@@ -26,6 +26,13 @@ y permite añadir cualquier .exe con portada automática.
 `%APPDATA%\ps-launcher`), donde se guarda la ruta de inicio y la portada de cada juego. Las portadas están en `covers\`.
 Pulsa **S** (o LB en el mando) para buscar juegos nuevos: ahí se escanea Steam/Epic y se descargan las portadas que falten
 (también las de los juegos que añadas con **+** o desde una carpeta). La primera vez, pulsa S.
+
+## Diseños: PS4, Centrado y PS3
+La tecla **L** (o R1/RB en el mando) va rotando entre los tres, y también se elige en **Ajustes > Diseño**.
+- **PS3 (XMB)**: fondo morado con las cintas de seda; categorías en horizontal (**Juegos**, **Recientes**, **Herramientas** con Añadir y Buscar juegos,
+  y **Ajustes**) y la lista de la categoría elegida en vertical. **Izquierda/derecha** cambia de categoría y **arriba/abajo** de elemento (también con la
+  cruceta, el stick o la rueda del ratón). Recientes se ordena por último jugado y las categorías vacías no se muestran. Cada categoría recuerda en qué fila
+  te quedaste. El fondo con la portada difuminada no se usa en este diseño.
 
 ## Pausa automática con otro programa en primer plano
 Mientras otro programa está delante (un juego, el navegador, lo que sea) el launcher queda **pausado**: la ventana sigue detrás con su
@@ -52,8 +59,14 @@ la optimización de gráficos y también si el launcher se cierra a la fuerza (e
   temporizador de seguridad de 2 s. Puede quedar un parpadeo de milisegundos; es el límite de ocultar la barra desde fuera de Windows.
 
 ## Fondo con la portada
-Si un juego o aplicación queda seleccionado más de **3 segundos**, su portada aparece difuminada de fondo (con fundido suave);
-al moverte, vuelve el fondo de cintas.
+Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece difuminada de fondo (con fundido suave);
+al moverte, vuelve el fondo de cintas. **Ajustes > Difuminado de la portada** regula cuánto se difumina (0 = nítida); mientras movés la barra
+se ve la portada del juego elegido para comparar.
+
+## Mejorar portadas (tecla P / LT · L2 · ZL)
+Revisa todas las portadas y, las que se ven mal (faltan, son chicas, o son apaisadas como la cabecera de Steam o el icono del .exe),
+las busca en internet en formato vertical 600x900: Steam (por appid), SteamGridDB (si hay clave en Ajustes) y la tienda de Steam
+si el nombre coincide exactamente. Solo reemplaza si la nueva es mejor, y nunca toca las portadas que elegiste a mano con **C**.
 
 ## Ajustes
 - Diseño PS4 / Centrado.
@@ -63,5 +76,16 @@ al moverte, vuelve el fondo de cintas.
    elige un directorio y cada .exe (hasta 3 subcarpetas) se añade como juego. Se omiten desinstaladores, redistribuibles,
   crash handlers y similares, y lo que ya estaba en la lista. Portada: imagen `cover`/`portada`/`poster`/`folder` junto al .exe → SteamGridDB (si hay clave)
   → portada de Steam si el nombre coincide exactamente → icono del .exe.
+- **Actualizaciones**: el launcher mira la última *release* de GitHub unos segundos después de abrir y cada 6 h. Si hay una versión mayor
+  aparece una tarjeta pequeña abajo a la derecha (**Actualizar** / **Ahora no**; una vez por versión). En Ajustes siempre se ve la versión y
+  hay un botón **Buscar actualizaciones**. Al actualizar descarga el .exe junto al actual, se cierra, lo reemplaza y abre el nuevo.
+  Configura `updateRepo` en `package.json` (`usuario/repositorio`). Para publicar una versión: sube `version` en `package.json` y haz push a `main`;
+  el workflow compila y crea/actualiza la release `v<version>` con `PS-Launcher.exe`.
 - **Fondo animado Sí/No**: cintas de seda estilo XMB de PS3; en "No" se quita el fondo (color liso, menos GPU).
+- **Color del fondo**: *Original* (azul en PS4/Centrado, morado en PS3), *Color* (8 colores rápidos o cualquiera con el selector) o *Arcoíris*,
+  que recorre todos los colores de forma suave; la barra **Velocidad** va de ~90 s por vuelta a ~6 s (con el mando, − y +). Se guarda y también
+  funciona con "Fondo animado: No" (color liso).
+- Al cambiar de diseño (**L** / botón del mando / Ajustes) todo se anima: PS4 ↔ Centrado las baldosas y el marco viajan a su nueva posición;
+  con PS3 el diseño anterior sale y el nuevo entra escalonado. En el XMB, al pasar de Juegos a Recientes a Herramientas… las categorías se deslizan
+  y la lista anterior sale hacia un lado mientras entra la nueva.
 - Clave de SteamGridDB para portadas de juegos que no son de Steam.

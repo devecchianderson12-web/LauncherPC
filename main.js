@@ -200,7 +200,7 @@ async function prefetchCovers(list) {
   }
 }
 // La interfaz pide portadas solo de la caché del disco: nunca descarga nada por su cuenta
-const cachedCover = item => { const f = coverFile(item.id); return fs.existsSync(f) ? fileUrl(f) : null; };
+const cachedCover = item => { const f = coverFile(item.id); return fs.existsSync(f) ? coverUrl(f) : null; };
 
 function listGames() {
   const all = [...lib.games, ...cfg.custom.map(c => ({ ...c, type: 'custom', dir: path.dirname(c.exe), start: c.exe }))];
@@ -219,6 +219,8 @@ function listGames() {
 const safe = id => id.replace(/[^a-z0-9_-]/gi, '_');
 const coverFile = id => path.join(coversDir(), safe(id) + '.jpg');
 const fileUrl = f => 'file:///' + f.replace(/\\/g, '/');
+// La fecha del archivo va en la URL: si una portada se reemplaza (tecla P), la interfaz no muestra la vieja desde su caché
+const coverUrl = f => { try { return fileUrl(f) + '?v=' + Math.round(fs.statSync(f).mtimeMs); } catch { return fileUrl(f); } };
 
 // Las portadas se guardan como mucho a 600x900: una imagen enorme pesa en la GPU aunque se vea pequeña
 function shrink(buf) {
@@ -239,24 +241,28 @@ async function download(url, headers = {}) {
   return Buffer.from(await r.arrayBuffer());
 }
 
-async function steamGridCover(name) {
+// Con appid (juegos de Steam) se busca directamente por su id de Steam; si no, por nombre
+async function steamGridCover(name, appid) {
   if (!cfg.apiKey) return null;
   const h = { Authorization: 'Bearer ' + cfg.apiKey };
-  const s = await (await fetch('https://www.steamgriddb.com/api/v2/search/autocomplete/' + encodeURIComponent(name), { headers: h })).json();
-  const gid = s?.data?.[0]?.id;
-  if (!gid) return null;
-  const g = await (await fetch(`https://www.steamgriddb.com/api/v2/grids/game/${gid}?dimensions=600x900`, { headers: h })).json();
-  const url = g?.data?.[0]?.url;
+  const grid = async p => { const g = await (await fetch(`https://www.steamgriddb.com/api/v2/grids/${p}?dimensions=600x900`, { headers: h, signal: AbortSignal.timeout(8000) })).json(); return g?.data?.[0]?.url || null; };
+  let url = null;
+  if (appid) { try { url = await grid('steam/' + appid); } catch {} }
+  if (!url) {
+    const s = await (await fetch('https://www.steamgriddb.com/api/v2/search/autocomplete/' + encodeURIComponent(name), { headers: h, signal: AbortSignal.timeout(8000) })).json();
+    const gid = s?.data?.[0]?.id;
+    if (gid) url = await grid('game/' + gid);
+  }
   return url ? download(url) : null;
 }
 
 // Tienda de Steam (sin clave): solo se acepta si el nombre coincide exactamente, para no poner portadas equivocadas
-async function steamStoreCover(name) {
+async function steamStoreCover(name, names = ['library_600x900.jpg', 'header.jpg']) {
   const r = await (await fetch('https://store.steampowered.com/api/storesearch/?l=english&cc=us&term=' + encodeURIComponent(name), { signal: AbortSignal.timeout(6000) })).json();
   const hit = (r.items || []).find(x => x.type === 'app' && nkey(x.name) === nkey(name));
   if (!hit) return null;
   const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${hit.id}/`;
-  for (const n of ['library_600x900.jpg', 'header.jpg']) { try { return await download(base + n); } catch {} }
+  for (const n of names) { try { return await download(base + n); } catch {} }
   return null;
 }
 
@@ -281,7 +287,7 @@ const coverFree = () => { const n = coverQ.shift(); if (n) n(); else coverActive
 const coverFail = new Set(), coverBusy = new Map();
 function getCover(item) {
   const f = coverFile(item.id);
-  if (fs.existsSync(f)) return Promise.resolve(fileUrl(f));
+  if (fs.existsSync(f)) return Promise.resolve(coverUrl(f));
   if (coverFail.has(item.id)) return Promise.resolve(null);     // ya falló en esta sesión; S lo reintenta
   if (!coverBusy.has(item.id)) coverBusy.set(item.id, fetchCover(item, f).finally(() => coverBusy.delete(item.id)));
   return coverBusy.get(item.id);
@@ -311,8 +317,57 @@ async function fetchCover(item, f) {
     fs.writeFileSync(f, shrink(buf));
     const g = lib.games.find(x => x.id === item.id);
     if (g && g.cover !== f) { g.cover = f; saveLib(); }
-    return fileUrl(f);
+    return coverUrl(f);
   } finally { coverFree(); }
+}
+
+// ---------- Mejorar portadas (tecla P / gatillo izquierdo) ----------
+// Una portada "se ve mal" si falta, es chica o no es vertical (icono del .exe, cabecera apaisada de Steam...).
+// Solo se buscan portadas verticales (600x900) y solo se reemplaza si la nueva es mejor. Las elegidas a mano con C no se tocan.
+const GOOD_COVER = 300;                                   // puntos: ~ancho en px de una portada vertical
+function coverScore(buf) {
+  try {
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return 0;
+    const { width: w, height: h } = img.getSize();
+    return h >= w * 1.2 ? Math.min(w, h / 1.5) : Math.min(w, h) / 4;   // apaisada o cuadrada: cuenta muy poco
+  } catch { return 0; }
+}
+async function betterCover(item) {
+  const cands = [];
+  if (item.type === 'steam') cands.push(() => download(`https://cdn.cloudflare.steamstatic.com/steam/apps/${item.appid}/library_600x900.jpg`));
+  cands.push(() => steamGridCover(item.name, item.type === 'steam' ? item.appid : null));
+  if (item.type !== 'steam') cands.push(() => steamStoreCover(item.name, ['library_600x900.jpg']));
+  for (const c of cands) {
+    try { const buf = await c(); if (buf && coverScore(buf) >= GOOD_COVER) return buf; } catch {}
+  }
+  return null;
+}
+async function upgradeCovers() {
+  const manual = cfg.manualCovers || {};
+  const low = listGames().filter(g => {
+    if (manual[g.id]) return false;
+    try { return coverScore(fs.readFileSync(coverFile(g.id))) < GOOD_COVER; } catch { return true; }   // sin portada también cuenta
+  });
+  let improved = 0;
+  await Promise.all(low.map(async g => {
+    await coverSlot();
+    try {
+      const buf = await betterCover(g);
+      if (!buf) return;
+      const f = coverFile(g.id);
+      let cur = 0; try { cur = coverScore(fs.readFileSync(f)); } catch {}
+      if (coverScore(buf) <= cur) return;
+      fs.mkdirSync(coversDir(), { recursive: true });
+      fs.writeFileSync(f, shrink(buf));
+      coverFail.delete(g.id);
+      const lg = lib.games.find(x => x.id === g.id);
+      if (lg && lg.cover !== f) { lg.cover = f; saveLib(); }
+      improved++;
+      if (win && !win.isDestroyed()) win.webContents.send('cover', { id: g.id, url: coverUrl(f) });
+    } catch {} finally { coverFree(); }
+  }));
+  return { low: low.length, improved, noKey: !cfg.apiKey };
 }
 
 // ---------- Estadísticas del sistema (solo mientras el launcher está visible) ----------
@@ -755,7 +810,7 @@ ipcMain.handle('retune', () => { cfg.tune = { done: false, tried: {}, pending: t
 
 ipcMain.handle('remove', (e, id) => {
   cfg.custom = cfg.custom.filter(c => c.id !== id);
-  delete cfg.recent[id];
+  delete cfg.recent[id]; if (cfg.manualCovers) delete cfg.manualCovers[id];
   saveCfg();
   try { fs.unlinkSync(coverFile(id)); } catch {}
 });
@@ -768,22 +823,105 @@ ipcMain.handle('setCover', async (e, id) => {
   if (r.canceled || !r.filePaths[0]) return null;
   fs.mkdirSync(coversDir(), { recursive: true });
   fs.writeFileSync(coverFile(id), shrink(fs.readFileSync(r.filePaths[0])));
+  (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano: "mejorar portadas" no la reemplaza
   return fileUrl(coverFile(id)) + '?t=' + Date.now();
 });
+ipcMain.handle('upgradeCovers', upgradeCovers);
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, user: os.userInfo().username }));
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
-  if (patch.layout === 'ps4' || patch.layout === 'center') cfg.layout = patch.layout;
+  if (patch.layout === 'ps4' || patch.layout === 'center' || patch.layout === 'ps3') cfg.layout = patch.layout;
   if (typeof patch.bg === 'boolean') cfg.bg = patch.bg;
   if (typeof patch.autostart === 'boolean') cfg.autostart = patch.autostart;
   if (typeof patch.minimized === 'boolean') cfg.minimized = patch.minimized;
   if (typeof patch.hideTaskbar === 'boolean') cfg.hideTaskbar = patch.hideTaskbar;
   if (patch.padMaps && typeof patch.padMaps === 'object') cfg.padMaps = patch.padMaps;
+  if (typeof patch.updSkip === 'string') cfg.updSkip = patch.updSkip.slice(0, 32);
+  if (['default', 'color', 'rainbow'].includes(patch.bgMode)) cfg.bgMode = patch.bgMode;
+  if (typeof patch.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(patch.bgColor)) cfg.bgColor = patch.bgColor;
+  if (Number.isFinite(patch.bgSpeed)) cfg.bgSpeed = Math.max(1, Math.min(100, Math.round(patch.bgSpeed)));
+  if (Number.isFinite(patch.artBlur)) cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
   saveCfg();
   if ('hideTaskbar' in patch) syncTaskbar();
   if ('autostart' in patch || 'minimized' in patch) applyAutostart();
 });
+
+// ---------- Actualizaciones (GitHub Releases) ----------
+// Mira la última release del repositorio (package.json -> "updateRepo"). Si su versión es mayor y trae un .exe, ofrece actualizar:
+// descarga el .exe junto al actual, cierra el programa y un script de Windows lo reemplaza y lo vuelve a abrir.
+const UPD_REPO = String(require('./package.json').updateRepo || '');
+const semver = v => String(v).replace(/^v/i, '').split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
+function isNewer(a, b) {                      // ¿a es mayor que b?
+  const x = semver(a), y = semver(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d > 0; }
+  return false;
+}
+let updInfo = null, updBusy = false;
+async function updCheck() {
+  const cur = app.getVersion();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(UPD_REPO)) return { ok: false, current: cur, error: 'Falta configurar el repositorio de GitHub (updateRepo en package.json)' };
+  try {
+    const r = await fetch(`https://api.github.com/repos/${UPD_REPO}/releases/latest`, {
+      headers: { 'User-Agent': 'PS-Launcher', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000)
+    });
+    if (r.status === 404) return { ok: true, current: cur, available: false };       // todavía no hay ninguna release
+    if (!r.ok) return { ok: false, current: cur, error: 'GitHub respondió ' + r.status };
+    const rel = await r.json();
+    const version = String(rel.tag_name || '').replace(/^v/i, '');
+    const exes = (rel.assets || []).filter(a => /\.exe$/i.test(a.name) && a.browser_download_url);
+    const asset = exes.find(a => /^PS-Launcher\.exe$/i.test(a.name)) || exes[0];
+    if (!version || !asset || !isNewer(version, cur)) { updInfo = null; return { ok: true, current: cur, available: false }; }
+    updInfo = { version, url: asset.browser_download_url, size: asset.size || 0 };
+    return { ok: true, current: cur, available: true, version };
+  } catch (e) { return { ok: false, current: cur, error: 'No se pudo comprobar (¿sin conexión?)' }; }
+}
+async function updInstall() {
+  if (updBusy) return { ok: false, error: 'Ya se está descargando' };
+  if (!updInfo) return { ok: false, error: 'No hay ninguna actualización pendiente' };
+  const target = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (process.platform !== 'win32' || !target) return { ok: false, error: 'Solo se puede actualizar solo desde el .exe portable' };
+  if (!updInfo.url.startsWith(`https://github.com/${UPD_REPO}/releases/download/`)) return { ok: false, error: 'Dirección de descarga no válida' };
+  updBusy = true;
+  const tmp = path.join(path.dirname(target), 'PS-Launcher.update.exe');
+  try {
+    const r = await fetch(updInfo.url, { headers: { 'User-Agent': 'PS-Launcher' }, signal: AbortSignal.timeout(600000) });
+    if (!r.ok || !r.body) throw new Error('Descarga rechazada (' + r.status + ')');
+    const total = Number(r.headers.get('content-length')) || updInfo.size || 0;
+    const out = fs.createWriteStream(tmp);
+    let got = 0, last = 0;
+    for await (const chunk of r.body) {
+      if (!out.write(chunk)) await new Promise(res => out.once('drain', res));
+      got += chunk.length;
+      const now = Date.now();
+      if (total && now - last > 120 && win && !win.isDestroyed()) { last = now; win.webContents.send('upd-progress', Math.min(99, Math.floor(got / total * 100))); }
+    }
+    await new Promise((res, rej) => { out.once('error', rej); out.end(res); });
+    const head = Buffer.alloc(2), fd = fs.openSync(tmp, 'r'); fs.readSync(fd, head, 0, 2, 0); fs.closeSync(fd);
+    if (got < 1e6 || head.toString('latin1') !== 'MZ' || (total && got !== total)) throw new Error('El archivo descargado está incompleto');
+    // Script: espera a que este programa se cierre (el .exe deja de estar bloqueado), lo reemplaza y abre el nuevo
+    const bat = path.join(os.tmpdir(), 'pslauncher-update.bat');
+    fs.writeFileSync(bat, [
+      '@echo off', 'chcp 65001 >nul', 'set n=0', ':retry',
+      `move /Y "${tmp}" "${target}" >nul 2>&1`, 'if not errorlevel 1 goto ok',
+      'set /a n+=1', 'if %n% GEQ 90 goto fail', 'ping -n 2 127.0.0.1 >nul', 'goto retry',
+      ':ok', `start "" "${target}"`, 'del "%~f0"', 'exit',
+      ':fail', 'del "%~f0"', 'exit', ''
+    ].join('\r\n'), 'utf8');
+    if (win && !win.isDestroyed()) win.webContents.send('upd-progress', 100);
+    const env = { ...process.env }; for (const k of Object.keys(env)) if (k.startsWith('PORTABLE_EXECUTABLE')) delete env[k];
+    spawn('cmd.exe', ['/c', bat], { detached: true, stdio: 'ignore', windowsHide: true, env }).unref();
+    app.isQuitting = true; stopShell();
+    setTimeout(() => app.exit(0), 400);
+    return { ok: true };
+  } catch (e) {
+    updBusy = false;
+    try { fs.unlinkSync(tmp); } catch {}
+    return { ok: false, error: String(e.message || e).slice(0, 120) };
+  }
+}
+ipcMain.handle('updCheck', updCheck);
+ipcMain.handle('updInstall', updInstall);
 ipcMain.handle('hide', hideLauncher);
 ipcMain.handle('quit', () => { app.isQuitting = true; app.quit(); });
 
@@ -810,6 +948,10 @@ app.whenReady().then(() => {
     if (cfg.tune && cfg.tune.pending) { cfg.tune.pending = false; saveCfg(); }       // este modo gráfico arrancó bien
     if (!process.argv.includes('--hidden')) showLauncher();
   });
+  // Borra restos de una actualización fallida y comprueba si hay versión nueva (unos segundos después de abrir, y cada 6 h)
+  try { if (process.env.PORTABLE_EXECUTABLE_FILE) fs.unlinkSync(path.join(path.dirname(process.env.PORTABLE_EXECUTABLE_FILE), 'PS-Launcher.update.exe')); } catch {}
+  const autoCheck = async () => { if (updBusy || !win || win.isDestroyed()) return; const r = await updCheck(); if (r.available && !win.isDestroyed()) win.webContents.send('upd-available', { version: r.version }); };
+  setTimeout(autoCheck, 12000); setInterval(autoCheck, 6 * 3600 * 1000);
 });
 app.on('will-quit', () => { globalShortcut.unregisterAll(); stopShell(); });
 app.on('window-all-closed', e => e.preventDefault());

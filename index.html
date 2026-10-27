@@ -27,7 +27,7 @@
   #avatar { width: calc(var(--u) * 56); height: calc(var(--u) * 56); border-radius: 50%; background: #e8f0ff; color: #0a2a86;
     display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 28); font-family: "Segoe UI", sans-serif; }
   #right { display: flex; justify-content: flex-end; align-items: center; gap: calc(var(--u) * 36); }
-  #stats { font-size: calc(var(--u) * 24); white-space: pre; opacity: .92; }
+  #stats { font-size: calc(var(--u) * 18); white-space: pre; color: #fff; opacity: 1; }
   #clock { font-size: calc(var(--u) * 38); }
 
   /* Escenario. Cada baldosa mide siempre su tamaño máximo y solo se mueve/reduce con transform: la transición la hace el compositor */
@@ -59,6 +59,34 @@
   .rc span { font-size: calc(var(--u) * 24); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.center #recent { display: none; }
 
+  /* Diseño PS3 (XMB): categorías en horizontal, lista en vertical bajo la categoría elegida */
+  body.ps3 #bg { background: linear-gradient(180deg, #6b76ac 0%, #5b3f84 100%); }
+  body.ps3.nobg #bg { background: #5a4a8a; }
+  body.ps3 #tiles, body.ps3 #strip, body.ps3 #frame, body.ps3 #title, body.ps3 #recent { display: none; }
+  #xmb { position: absolute; inset: 0; display: none; }
+  body.ps3 #xmb { display: block; }
+  .xc, .xr { position: absolute; left: 0; top: 0; will-change: transform; transition: transform .3s cubic-bezier(.22,.8,.24,1); }
+  #xcats.inst .xc, #xlist.inst .xr { transition: none; }
+  .xc { cursor: pointer; }
+  .xc .ci { position: absolute; width: calc(var(--u) * 120); height: calc(var(--u) * 120); left: calc(var(--u) * -60); top: calc(var(--u) * -60);
+    transform: scale(.68); opacity: .5; transition: transform .3s cubic-bezier(.22,.8,.24,1), opacity .3s; }
+  .xc .ci svg { width: 100%; height: 100%; display: block; }
+  .xc.sel .ci { transform: none; opacity: 1; filter: drop-shadow(0 0 calc(var(--u) * 12) rgba(255,255,255,.45)); }
+  .xc .cl { position: absolute; left: calc(var(--u) * -110); width: calc(var(--u) * 220); top: calc(var(--u) * 70); text-align: center;
+    font-size: calc(var(--u) * 26); opacity: 0; transition: opacity .3s; text-shadow: 0 0 calc(var(--u) * 10) rgba(255,255,255,.5); }
+  .xc.sel .cl { opacity: 1; }
+  .xr { cursor: pointer; }
+  .xr .ic { position: absolute; width: calc(var(--u) * 125); height: calc(var(--u) * 125); left: calc(var(--u) * -62.5); top: calc(var(--u) * -62.5);
+    transform: scale(.42); opacity: .75; overflow: hidden; background: rgba(255,255,255,.22); display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--u) * 70); font-weight: 200; transition: transform .3s cubic-bezier(.22,.8,.24,1), opacity .3s; }
+  .xr .ic img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; pointer-events: none; }
+  .xr.sel .ic { transform: none; opacity: 1; box-shadow: 0 0 calc(var(--u) * 26) rgba(255,255,255,.35); }
+  .xr .xt { position: absolute; left: calc(var(--u) * 50); top: calc(var(--u) * -17); font-size: calc(var(--u) * 26); white-space: nowrap; opacity: .6;
+    max-width: calc(var(--u) * 900); overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 calc(var(--u) * 8) rgba(50,35,100,.6); }
+  .xr .xs { position: absolute; left: calc(var(--u) * 115); top: calc(var(--u) * 16); font-size: calc(var(--u) * 22); opacity: 0; white-space: nowrap; }
+  .xr.sel .xt { left: calc(var(--u) * 115); top: calc(var(--u) * -38); font-size: calc(var(--u) * 42); opacity: 1; text-shadow: 0 0 calc(var(--u) * 14) rgba(255,255,255,.55); }
+  .xr.sel .xs { opacity: .8; }
+
   /* Entrada, salida e inicio de juego: solo opacity y transform de #stage */
   body.enter #stage { animation: stageIn .35s cubic-bezier(.15,.9,.2,1) backwards; }
   body.enter #top, body.enter #recent { animation: fadeIn .3s .05s ease-out backwards; }
@@ -87,16 +115,29 @@
   #toast { position: fixed; bottom: 40px; left: 50%; transform: translate3d(-50%, 14px, 0); background: rgba(255,255,255,.95); color: #0a2a86;
     padding: 12px 26px; font-size: 22px; opacity: 0; transition: opacity .2s, transform .25s; pointer-events: none; z-index: 20; }
   #toast.on { opacity: 1; transform: translate3d(-50%, 0, 0); }
+  /* Aviso de actualización: tarjeta pequeña abajo a la derecha, sin tapar el centro ni quitar el foco */
+  #upd { position: fixed; right: calc(var(--u) * 40); bottom: calc(var(--u) * 40); width: calc(var(--u) * 430); padding: calc(var(--u) * 20) calc(var(--u) * 24);
+    background: rgba(8,22,70,.88); border: 1px solid rgba(255,255,255,.35); z-index: 9; opacity: 0; visibility: hidden; transform: translate3d(0, 16px, 0);
+    transition: opacity .3s, transform .35s cubic-bezier(.2,.9,.25,1), visibility 0s .35s; }
+  #upd.on { opacity: 1; visibility: visible; transform: none; transition: opacity .3s, transform .35s cubic-bezier(.2,.9,.25,1); }
+  #upd b { display: block; font-size: calc(var(--u) * 24); font-weight: 400; }
+  #upd span { display: block; font-size: calc(var(--u) * 18); opacity: .7; margin-top: calc(var(--u) * 4); }
+  #upd .btns { margin-top: calc(var(--u) * 16); gap: calc(var(--u) * 12); }
+  #upd .btn { font-size: calc(var(--u) * 18); padding: calc(var(--u) * 7) calc(var(--u) * 20); }
+  #upd .pb { height: 3px; margin-top: calc(var(--u) * 16); background: rgba(255,255,255,.2); display: none; }
+  #upd .pb i { display: block; height: 100%; width: 0; background: #fff; transition: width .2s; }
+  #upd.busy .btns { display: none; } #upd.busy .pb { display: block; }
   #fps { position: fixed; right: 14px; bottom: 10px; font: 16px Consolas, monospace; opacity: .8; display: none; z-index: 20; }
 
   /* Ajustes */
   #settings { position: fixed; inset: 0; background: rgba(2,8,42,.94); display: flex; align-items: center; justify-content: center; z-index: 10; font-size: 22px;
     opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
   #settings.open { opacity: 1; visibility: visible; transition: opacity .2s; }
-  #settings .panel { width: 700px; max-width: 92vw; display: flex; flex-direction: column; gap: 14px;
+  #settings .panel { width: 700px; max-width: 92vw; max-height: 94vh; overflow-y: auto; scrollbar-width: none; padding: 4px; display: flex; flex-direction: column; gap: 14px;
     transform: translate3d(0, 16px, 0) scale(.97); transition: transform .28s cubic-bezier(.2,.9,.25,1); }
+  #settings .panel::-webkit-scrollbar { display: none; }
   #settings.open .panel { transform: none; }
-  @media (max-height: 860px) { #settings .panel { zoom: .84; } }
+  @media (max-height: 860px) { #settings .panel { zoom: .84; max-height: 112vh; } }
   #settings .row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
   #settings .row.dim { opacity: .55; }
   #settings input { width: 100%; padding: 12px 16px; font-size: 20px; background: #0a2a7a; color: #fff; border: 2px solid #fff; outline: none; user-select: text; }
@@ -106,6 +147,12 @@
   #flist .fr em { opacity: .6; font-style: normal; flex: none; }
   #flist .btn { font-size: 16px; padding: 6px 16px; flex: none; }
   #settings p { opacity: .75; font-size: 17px; line-height: 1.4; }
+  #settings input[type=color] { width: 64px; height: 40px; padding: 0; border: 2px solid #fff; background: none; cursor: pointer; flex: none; }
+  #settings input[type=range] { flex: 1; width: auto; padding: 0; border: none; background: none; height: 30px; accent-color: #fff; cursor: pointer; }
+  .sws { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn.sw { width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); }
+  .btn.sw.on { box-shadow: 0 0 0 3px #fff; border-color: #fff; }
+  .btn.sm { padding: 4px 16px; flex: none; }
   .btns { display: flex; gap: 14px; }
   .btn { padding: 10px 28px; border: 2px solid rgba(255,255,255,.6); background: transparent; color: #fff; font: inherit; font-size: 20px; cursor: pointer; }
   .btn:hover { border-color: #fff; }
@@ -122,12 +169,12 @@
 <body class="ps4 enter">
 <div id="bg"><canvas id="wave"></canvas></div>
 
-<canvas id="bgart" width="192" height="108"></canvas>
+<canvas id="bgart" width="640" height="360"></canvas>
 
 <div id="top">
-  <div id="hint">Enter jugar &nbsp; S buscar juegos &nbsp; C portada &nbsp; L diseño &nbsp; Supr quitar &nbsp; Esc cerrar</div>
+  <div id="hint">Enter jugar &nbsp; S buscar juegos &nbsp; C portada &nbsp; P mejorar portadas &nbsp; L diseño &nbsp; Supr quitar &nbsp; Esc cerrar</div>
   <div id="user"><div id="avatar"></div><div id="uname"></div></div>
-  <div id="right"><div id="stats">CPU --%  |  RAM --  |  GPU --% --°</div><div id="clock"></div></div>
+  <div id="right"><div id="stats">CPU --%   RAM --   GPU --% --°</div><div id="clock"></div></div>
 </div>
 
 <div id="stage">
@@ -135,6 +182,7 @@
   <div id="strip"><svg viewBox="0 0 24 24"><path d="M12 4v14M6 12l6 6 6-6" stroke="#fff" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   <div id="frame"></div>
   <div id="title"></div>
+  <div id="xmb"><div id="xcats"></div><div id="xlist"></div></div>
 </div>
 
 <div id="recent"><h2>Recientes</h2><div id="rlist"></div></div>
@@ -142,17 +190,25 @@
 <div id="wait"><div class="l1">Iniciando</div><div class="l2" id="lname"></div><div class="bar"><i></i></div><div class="l3">Se minimiza al abrirse el juego en pantalla completa · Esc para cancelar</div></div>
 
 <div id="padwiz"><div id="pw-t"></div><small id="pw-s"></small><div class="btns"><button class="btn" id="pw-skip">Omitir</button><button class="btn" id="pw-cancel">Cancelar</button></div></div>
+<div id="upd"><b id="upd-t"></b><span id="upd-s">Se cerrará y se abrirá la versión nueva</span>
+  <div class="btns"><button class="btn on" id="upd-go">Actualizar</button><button class="btn" id="upd-no">Ahora no</button></div>
+  <div class="pb"><i></i></div></div>
 <div id="toast"></div><div id="fps"></div>
 
 <div id="settings"><div class="panel">
   <div class="row"><span id="gfxinfo">Gráficos</span><button class="btn" id="b-tune">Optimizar</button></div>
-  <div class="row"><span>Diseño</span><div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button></div></div>
+  <div class="row"><span>Diseño</span><div class="btns"><button class="btn" id="b-ps4">PS4</button><button class="btn" id="b-center">Centrado</button><button class="btn" id="b-ps3">PS3</button></div></div>
   <div class="row"><span>Fondo animado</span><div class="btns"><button class="btn" id="b-bgon">Sí</button><button class="btn" id="b-bgoff">No</button></div></div>
+  <div class="row"><span>Color del fondo</span><div class="btns"><button class="btn" id="b-cdef">Original</button><button class="btn" id="b-ccol">Color</button><button class="btn" id="b-crb">Arcoíris</button></div></div>
+  <div class="row" id="r-col"><div class="sws" id="sws"></div><input type="color" id="colpick" value="#6b4fa0"></div>
+  <div class="row" id="r-spd"><span>Velocidad</span><button class="btn sm" id="b-spm">−</button><input type="range" id="spd" min="1" max="100" value="30"><button class="btn sm" id="b-spp">+</button></div>
+  <div class="row"><span>Difuminado de la portada</span><button class="btn sm" id="b-blm">−</button><input type="range" id="blur" min="0" max="100" value="55"><button class="btn sm" id="b-blp">+</button></div>
   <div class="row"><span>Iniciar con Windows</span><div class="btns"><button class="btn" id="b-aton">Sí</button><button class="btn" id="b-atoff">No</button></div></div>
   <div class="row" id="r-min"><span>Iniciar minimizado</span><div class="btns"><button class="btn" id="b-mnon">Sí</button><button class="btn" id="b-mnoff">No</button></div></div>
   <div class="row"><span id="padinfo">Mando</span><div class="btns"><button class="btn" id="b-pad">Configurar botones</button><button class="btn" id="b-padreset">Restablecer</button></div></div>
   <p style="margin-top:-6px">Xbox, PlayStation y Nintendo se detectan solos y la ayuda de abajo cambia según el mando. Con mandos raros usa Configurar botones. Dentro de Ajustes: cruceta para moverte, A/✕ pulsa, B/○ cierra.</p>
   <div class="row"><span>Ocultar barra de tareas</span><div class="btns"><button class="btn" id="b-tbon">Sí</button><button class="btn" id="b-tboff">No</button></div></div>
+  <div class="row"><span id="updinfo">Versión</span><div class="btns"><button class="btn" id="b-updgo" style="display:none">Actualizar</button><button class="btn" id="b-updchk">Buscar actualizaciones</button></div></div>
   <div class="row"><span>Cerrar el launcher por completo</span><button class="btn" id="b-quit">Salir</button></div>
   <p style="margin-top:-6px">Minimizado: al arrancar con Windows el launcher queda en la bandeja y se abre con Ctrl+Alt+P. Si lo abres tú con doble clic, siempre se muestra.</p>
   <div class="row"><span>Juegos desde una carpeta</span><button class="btn" id="b-folder">Elegir carpeta…</button></div>
@@ -170,6 +226,7 @@ const CFG = { id: '_cfg', type: 'cfg', name: 'Ajustes' };
 
 // Dos diseños, en unidades de 1920x1080
 const L = {
+  ps3:    { bw: 342, bh: 342, ss: 1,    so: 200 / 342, gap: 8,  anchor: 279,  top: 208, valign: 'top',    extra: 0 },   // solo para que el resto del código tenga datos; el PS3 se dibuja en #xmb
   ps4:    { bw: 342, bh: 342, ss: 1,    so: 200 / 342, gap: 8,  anchor: 279,  top: 208, valign: 'top',    extra: 66 },
   center: { bw: 220, bh: 330, ss: 1.22, so: 1,         gap: 34, anchor: null, cy: 470,  valign: 'center', extra: 0 }
 };
@@ -177,16 +234,52 @@ const VIS = 8;   // solo se dibujan las baldosas a ±8 de la selección; el rest
 
 let items = [], tiles = [], sel = 0, covers = {}, layout = 'ps4', sig = '', u = 1, moved = false, launching = false;
 
+// ---------- Color del fondo: original, color elegido o arcoíris ----------
+const Tint = (() => {
+  const st = { mode: 'default', rgb: [.42, .31, .63], speed: 30, hue: 0 };
+  const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const hsv = (h, sa, v) => { const f = n => { const k = (n + h * 6) % 6; return v - v * sa * Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; };
+  const mix = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
+  const color = () => st.mode === 'rainbow' ? hsv(st.hue, .6, .85) : st.rgb;
+  return {
+    get mode() { return st.mode; },
+    active: () => st.mode !== 'default',
+    set(o) { if (o.mode) st.mode = o.mode; if (o.hex) st.rgb = hexRgb(o.hex); if (o.speed != null) st.speed = o.speed; },
+    // Tono: del más lento (~90 s por vuelta) al más rápido (~6 s por vuelta). El matiz se acumula, así que cambiar la velocidad no da saltos
+    adv(dt) { if (st.mode === 'rainbow') st.hue = (st.hue + dt / 90 * Math.pow(15, st.speed / 100)) % 1; },
+    color,
+    pal() { const c = color(); return { top: mix(c, [.80, .84, .96], .30).map(x => x * .82), bot: c.map(x => x * .62) }; },
+    css: a => 'rgb(' + a.map(x => Math.round(Math.max(0, Math.min(1, x)) * 255)).join(',') + ')'
+  };
+})();
+// Degradado de #bg (lo que se ve con "Fondo animado: No" o antes de que arranque el shader)
+function applyBgStyle() {
+  const bg = $('#bg');
+  if (!Tint.active()) { bg.style.background = ''; return; }
+  const { top, bot } = Tint.pal();
+  bg.style.background = document.body.classList.contains('nobg')
+    ? Tint.css(top.map((x, i) => (x + bot[i]) / 2))
+    : `linear-gradient(180deg, ${Tint.css(top)} 0%, ${Tint.css(bot)} 100%)`;
+}
+// Sin fondo animado el arcoíris sigue funcionando: solo cambia un color liso, unas 10 veces por segundo
+setInterval(() => {
+  const b = document.body.classList;
+  if (Tint.mode === 'rainbow' && b.contains('nobg') && !b.contains('paused') && !document.hidden) { Tint.adv(.1); applyBgStyle(); }
+}, 100);
+
 // ---------- Fondo: cintas de seda estilo XMB de PS3 ----------
 // Shader WebGL a ~40 % de resolución y 30 fps (el movimiento es muy lento, no se nota) y se detiene cuando no hace falta.
 // Si WebGL no está disponible se dibuja una versión simple en canvas 2D.
 const Wave = (() => {
   const cv = $('#wave'), SCALE = .4;
-  let gl = null, ctx2 = null, uR = null, uT = null, raf = 0, on = false, last = 0, ready = false;
+  let gl = null, ctx2 = null, uR = null, uT = null, uP = null, uC = null, uK = null, purple = 0, raf = 0, on = false, last = 0, ready = false;
   const t0 = performance.now();
   const FS = `precision highp float;
 uniform vec2 R;
 uniform float T;
+uniform float P;
+uniform vec3 C;
+uniform float K;
 float ribbon(vec2 p, float i) {
   float base = 0.24 + 0.07 * i + 0.09 * (p.x - 0.9);
   float y1 = base + 0.090 * sin(p.x * (1.25 + 0.20 * i) + T * (0.13 + 0.022 * i) + i * 2.1)
@@ -207,13 +300,17 @@ float ribbon(vec2 p, float i) {
 void main() {
   vec2 uv = gl_FragCoord.xy / R;
   vec2 p = vec2(uv.x * R.x / R.y, uv.y);
-  vec3 top = vec3(0.015, 0.06, 0.27), bot = vec3(0.07, 0.30, 0.82);
+  vec3 top = mix(vec3(0.015, 0.06, 0.27), vec3(0.42, 0.46, 0.68), P), bot = mix(vec3(0.07, 0.30, 0.82), vec3(0.40, 0.25, 0.52), P);
+  top = mix(top, mix(C, vec3(0.80, 0.84, 0.96), 0.30) * 0.82, K);
+  bot = mix(bot, C * 0.62, K);
   vec3 col = mix(bot, top, pow(uv.y, 0.75));
   vec2 q = (uv - vec2(0.55, 0.12)) * vec2(1.0, 1.9);
-  col += vec3(0.10, 0.22, 0.45) * exp(-dot(q, q) * 2.2);
+  vec3 gl0 = mix(vec3(0.10, 0.22, 0.45), vec3(0.16, 0.14, 0.26), P);
+  col += mix(gl0, C * 0.30 + 0.03, K) * exp(-dot(q, q) * 2.2);
   float a = 0.0;
   for (int i = 0; i < 5; i++) a += ribbon(p, float(i));
-  col += vec3(0.80, 0.90, 1.0) * a;
+  vec3 tint = mix(mix(vec3(0.80, 0.90, 1.0), vec3(0.80, 0.72, 1.0), P), mix(vec3(0.85), C * 1.25, 0.5), K);
+  col += tint * a * mix(mix(1.0, 0.5, P), 0.7, K);
   col += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -230,7 +327,8 @@ void main() {
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    uR = gl.getUniformLocation(pr, 'R'); uT = gl.getUniformLocation(pr, 'T');
+    uR = gl.getUniformLocation(pr, 'R'); uT = gl.getUniformLocation(pr, 'T'); uP = gl.getUniformLocation(pr, 'P');
+    uC = gl.getUniformLocation(pr, 'C'); uK = gl.getUniformLocation(pr, 'K');
     return true;
   }
   // Misma fórmula que el shader, para la versión 2D
@@ -242,7 +340,9 @@ void main() {
   }
   function draw2d(T) {
     const w = cv.width, h = cv.height, N = 48, asp = w / h;
-    const g = ctx2.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#04103f'); g.addColorStop(1, '#1c64e8');
+    const g = ctx2.createLinearGradient(0, 0, 0, h);
+    if (Tint.active()) { const pl = Tint.pal(); g.addColorStop(0, Tint.css(pl.top)); g.addColorStop(1, Tint.css(pl.bot)); }
+    else { g.addColorStop(0, purple ? '#6b76ac' : '#04103f'); g.addColorStop(1, purple ? '#5b3f84' : '#1c64e8'); }
     ctx2.fillStyle = g; ctx2.fillRect(0, 0, w, h);
     for (let i = 0; i < 5; i++) {
       const lo = [], hi = [];
@@ -264,9 +364,15 @@ void main() {
     if (!on) return;
     raf = requestAnimationFrame(frame);
     if (ts - last < 32) return;                      // 30 fps
+    const dt = last ? Math.min((ts - last) / 1000, .1) : 0;
     last = ts;
+    Tint.adv(dt);
     const T = (ts - t0) / 1000;
-    if (gl) { gl.uniform1f(uT, T); gl.drawArrays(gl.TRIANGLES, 0, 3); } else draw2d(T);
+    if (gl) {
+      const c = Tint.color();
+      gl.uniform3f(uC, c[0], c[1], c[2]); gl.uniform1f(uK, Tint.active() ? 1 : 0);
+      gl.uniform1f(uT, T); gl.uniform1f(uP, purple); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else draw2d(T);
   }
   return {
     set(v) {
@@ -276,7 +382,7 @@ void main() {
       if (!ready) { ready = true; if (!initGL()) ctx2 = cv.getContext('2d'); }
       size(); last = 0; raf = requestAnimationFrame(frame);
     },
-    size
+    size, theme(v) { purple = v; }
   };
 })();
 let shown = false;
@@ -294,6 +400,7 @@ function layoutBox() {
 
 // Calcula el destino de cada baldosa; la animación la hace la transición CSS (una sola escritura por pulsación, nada por fotograma)
 function place(instant) {
+  if (layout === 'ps3') { xmbFollow(instant); return; }
   const { c, sw, ow, ax } = layoutBox(), first = sw + c.gap, step = ow + c.gap, box = $('#tiles');
   if (instant) box.classList.add('inst');
   for (let i = 0; i < tiles.length; i++) {
@@ -337,8 +444,165 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+
+// ---------- Diseño PS3 (XMB) ----------
+// Categorías en horizontal (Juegos, Recientes, Herramientas, Ajustes); bajo la elegida, su lista en vertical. Izquierda/derecha cambia de
+// categoría, arriba/abajo de elemento. Las categorías vacías no se muestran. Todo se mueve con transform (la transición la hace el compositor).
+const SCAN = { id: '_scan', type: 'scan', name: 'Buscar juegos' };
+const IC = (body, dark = 'rgba(80,70,130,.9)') => `<svg viewBox="0 0 24 24" fill="#fff" stroke="${dark}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const XC = [
+  { id: 'games', name: 'Juegos', list: () => items.filter(g => g.type !== 'add' && g.type !== 'cfg'),
+    icon: IC('<path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.6 2.6 0 0 1-4.4 1.3L14.6 15.5H9.4L7.7 17.6a2.6 2.6 0 0 1-4.4-1.3l-.7-3.4A4.5 4.5 0 0 1 7 7.5z" stroke="none"/><path d="M8.2 10.3v3.4M6.5 12h3.4"/><circle cx="15.4" cy="11" r=".9" fill="rgba(80,70,130,.9)" stroke="none"/><circle cx="17.4" cy="13" r=".9" fill="rgba(80,70,130,.9)" stroke="none"/>') },
+  { id: 'recent', name: 'Recientes', list: () => items.filter(g => g.last).sort((a, b) => b.last - a.last),
+    icon: IC('<circle cx="12" cy="12" r="9.3" stroke="none"/><path d="M12 6.8V12l3.4 2.2"/>') },
+  { id: 'tools', name: 'Herramientas', list: () => [ADD, SCAN],
+    icon: IC('<rect x="2.6" y="8" width="18.8" height="12.2" rx="2.2" stroke="none"/><path d="M8.8 8V6.4a1.2 1.2 0 0 1 1.2-1.2h4a1.2 1.2 0 0 1 1.2 1.2V8" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M2.6 13.4h18.8"/>') },
+  { id: 'cfg', name: 'Ajustes', list: () => [CFG],
+    icon: IC('<g stroke="none"><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2"/><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2" transform="rotate(45 12 12)"/><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2" transform="rotate(90 12 12)"/><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2" transform="rotate(135 12 12)"/><circle cx="12" cy="12" r="6.6"/></g><circle cx="12" cy="12" r="2.6" fill="rgba(80,70,130,.9)" stroke="none"/>') }
+];
+const SUB = { steam: 'Steam', epic: 'Epic Games', custom: 'Aplicación', add: 'Elige un juego o programa', cfg: 'Opciones del launcher', scan: 'Busca juegos nuevos en Steam y Epic' };
+const XM = { cx: 565, cy: 290, cs: 205, sy: 505, by: 679, ay: 119, rs: 80 };   // posiciones en unidades de 1920x1080
+let xcats = [], xcat = 0, xrow = 0, xcEls = [], xrEls = [], xmem = {};
+const idxOf = it => items.findIndex(g => g.id === it.id);
+
+function fillIcon(ic, it) {
+  ic.textContent = '';
+  if (it.type === 'add') ic.textContent = '+';
+  else if (it.type === 'cfg') ic.textContent = '⚙';
+  else if (it.type === 'scan') ic.textContent = '⟳';
+  else if (covers[it.id]) { const im = new Image(); im.draggable = false; im.src = covers[it.id]; ic.appendChild(im); }
+  else ic.textContent = (it.name || '?').trim().charAt(0).toUpperCase();
+}
+function xmbCovers(id) { xrEls.forEach(el => { if (el._id === id) fillIcon(el.firstChild, el._it); }); }
+
+function xmbRows() {
+  const box = $('#xlist'); box.textContent = ''; xrEls = [];
+  const c = xcats[xcat]; if (!c) return;
+  const frag = document.createDocumentFragment();
+  c.rows.forEach((it, i) => {
+    const el = document.createElement('div'); el.className = 'xr'; el._id = it.id; el._it = it;
+    const ic = document.createElement('div'); ic.className = 'ic'; fillIcon(ic, it); el.appendChild(ic);
+    const t = document.createElement('div'); t.className = 'xt'; t.textContent = it.name; el.appendChild(t);
+    const s = document.createElement('div'); s.className = 'xs'; s.textContent = SUB[it.type] || ''; el.appendChild(s);
+    el.onclick = () => { if (i === xrow) activate(); else { moved = true; xrow = i; xmbSync(); } };
+    frag.appendChild(el); xrEls.push(el);
+  });
+  box.appendChild(frag);
+}
+function xmbBuild() {
+  const target = items[sel], prevId = xcats[xcat] && xcats[xcat].id;
+  xcats = XC.map(c => ({ id: c.id, name: c.name, icon: c.icon, rows: c.list() })).filter(c => c.rows.length);
+  const has = c => target && c.rows.some(r => r.id === target.id);
+  let ci = xcats.findIndex(c => c.id === prevId && has(c));
+  if (ci < 0) ci = xcats.findIndex(has);
+  if (ci < 0) ci = Math.max(0, xcats.findIndex(c => c.id === prevId));
+  xcat = ci;
+  const c = xcats[ci];
+  xrow = target && has(c) ? c.rows.findIndex(r => r.id === target.id) : Math.min(xmem[c.id] || 0, c.rows.length - 1);
+  const box = $('#xcats'); box.textContent = ''; xcEls = [];
+  xcats.forEach((k, i) => {
+    const el = document.createElement('div'); el.className = 'xc';
+    const ci2 = document.createElement('div'); ci2.className = 'ci'; ci2.innerHTML = k.icon; el.appendChild(ci2);
+    const cl = document.createElement('div'); cl.className = 'cl'; cl.textContent = k.name; el.appendChild(cl);
+    el.onclick = () => { if (i !== xcat) { moved = true; xmbMove(i - xcat, 0); } };
+    box.appendChild(el); xcEls.push(el);
+  });
+  xmbRows(); xmbSync(true);
+}
+function xmbPlace(instC, instR = instC) {
+  const box = $('#xmb'), cats = $('#xcats'), list = $('#xlist');
+  if (instC) cats.classList.add('inst');
+  if (instR) list.classList.add('inst');
+  xcEls.forEach((el, i) => {
+    const d = i - xcat, x = XM.cx + d * XM.cs;
+    el.style.transform = `translate3d(${(x * u).toFixed(1)}px, ${(XM.cy * u).toFixed(1)}px, 0)`;
+    el.classList.toggle('sel', d === 0);
+  });
+  xrEls.forEach((el, i) => {
+    const d = i - xrow;
+    if (d < -1 || d > 6) { if (el._on !== false) { el._on = false; el.style.display = 'none'; } return; }   // fuera de pantalla: no existe para el compositor
+    if (el._on !== true) { el._on = true; el.style.display = ''; }
+    const y = d === 0 ? XM.sy : d > 0 ? XM.by + (d - 1) * XM.rs : XM.ay + (d + 1) * XM.rs;
+    el.style.transform = `translate3d(${(XM.cx * u).toFixed(1)}px, ${(y * u).toFixed(1)}px, 0)`;
+    el.classList.toggle('sel', d === 0);
+  });
+  if (instC || instR) { void box.offsetWidth; cats.classList.remove('inst'); list.classList.remove('inst'); }
+}
+// Fija lo elegido en el XMB como selección global (para que activar, quitar y cambiar portada sigan funcionando igual)
+function xmbSync(instC, instR = instC) {
+  const c = xcats[xcat]; if (!c) return;
+  xmem[c.id] = xrow;
+  const it = c.rows[xrow];
+  sel = it ? idxOf(it) : 0;                                  // -1 en "Buscar juegos", que no es un juego de la lista
+  xmbPlace(instC, instR); armArt();
+}
+// Cambio de categoría: la lista vieja se desliza y se desvanece hacia un lado, la nueva entra desde el otro con un pequeño escalonado
+const XEASE = 'cubic-bezier(.2,.9,.25,1)';
+function xmbGhost(dir) {
+  const old = $('#xlist');
+  if (!old.children.length) return;
+  const g = old.cloneNode(true); g.removeAttribute('id'); g.style.pointerEvents = 'none';
+  g.querySelectorAll('.xr').forEach(e => { e.onclick = null; });
+  old.parentNode.insertBefore(g, old);
+  const a = g.animate([{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: (-dir * 70) + 'px 0' }], { duration: 220, easing: 'ease-in', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => g.remove();
+}
+function xmbEnter(dir) {
+  xrEls.forEach((el, i) => {
+    if (el._on === false || i > 8) return;
+    el.animate([{ opacity: 0, translate: (dir * 90) + 'px 0' }, { opacity: 1, translate: '0 0' }], { duration: 400, delay: 60 + i * 30, easing: XEASE, fill: 'backwards' });
+  });
+}
+function xmbSwitch(n, row, animate = true) {
+  const dir = Math.sign(n - xcat) || 1;
+  if (animate) xmbGhost(dir);
+  xcat = n; xrow = row;
+  xmbRows(); xmbSync(!animate, true);                        // las categorías se deslizan; la lista nueva se coloca directa y entra con su animación
+  if (animate) xmbEnter(dir);
+}
+// Otro código ha cambiado `sel` (empezar por el último juego, añadir un juego…): el XMB se coloca donde corresponde
+function xmbFollow(instant) {
+  const it = items[sel];
+  if (it && xcats.length) {
+    const cur = xcats[xcat] && xcats[xcat].rows[xrow];
+    if (!cur || cur.id !== it.id) xmbSelect(it, instant);
+  }
+  xmbPlace(instant);
+}
+function xmbSelect(it, instant) {
+  const has = c => c.rows.some(r => r.id === it.id);
+  const ci = xcats[xcat] && has(xcats[xcat]) ? xcat : xcats.findIndex(has);
+  if (ci < 0) return;
+  const row = xcats[ci].rows.findIndex(r => r.id === it.id);
+  if (ci !== xcat) { xmbSwitch(ci, row, !instant); return; }
+  xrow = row; xmbSync(instant);
+}
+function xmbMove(dx, dy) {
+  if (!xcats.length) return;
+  moved = true;
+  if (dx) {
+    const n = Math.max(0, Math.min(xcats.length - 1, xcat + dx));
+    if (n === xcat) return;
+    xmbSwitch(n, Math.min(xmem[xcats[n].id] || 0, xcats[n].rows.length - 1));
+  } else if (dy) {
+    const n = Math.max(0, Math.min(xcats[xcat].rows.length - 1, xrow + dy));
+    if (n === xrow) return;
+    xrow = n; xmbSync();
+  }
+}
+// Flechas y cruceta: en PS3 mueven en las dos direcciones; en los demás diseños solo izquierda/derecha
+function step(dx, dy) { if (layout === 'ps3') xmbMove(dx, dy); else if (dx) go(sel + dx); }
+const nextLayout = () => ({ ps4: 'center', center: 'ps3', ps3: 'ps4' }[layout] || 'ps4');
+let wheelAt = 0;
+addEventListener('wheel', e => {
+  if (layout !== 'ps3' || settingsOpen() || launching || !e.deltaY) return;
+  const now = performance.now(); if (now - wheelAt < 90) return; wheelAt = now;
+  xmbMove(0, Math.sign(e.deltaY));
+}, { passive: true });
+
 function go(i) {
   const n = Math.max(0, Math.min(items.length - 1, i));
+  if (layout === 'ps3') { if (items[n]) { moved = true; xmbSelect(items[n]); } return; }
   if (n === sel) return;
   moved = true; sel = n; place(); updateInfo(); armArt();
 }
@@ -359,7 +623,7 @@ function buildTile(it, i) {
         art.querySelectorAll('img').forEach(x => x.remove()); art.appendChild(img);
         if (instant) { img.classList.add('now', 'in'); ph.style.display = 'none'; }
         else { void img.offsetWidth; img.classList.add('in'); setTimeout(() => { ph.style.display = 'none'; }, 330); }
-        updateRecent();
+        updateRecent(); xmbCovers(it.id);
         if (tiles[sel] === t) armArt();
       };
       img.src = url;
@@ -376,7 +640,8 @@ function render() {
   const frag = document.createDocumentFragment();
   items.forEach((it, i) => { const t = buildTile(it, i); frag.appendChild(t); tiles.push(t); });
   box.appendChild(frag);
-  sizeTiles(); place(true); updateInfo(); updateRecent(); armArt();
+  sizeTiles(); if (layout === 'ps3') xmbBuild(); else place(true);
+  updateInfo(); updateRecent(); armArt();
 }
 
 async function load(force) {
@@ -390,7 +655,7 @@ async function load(force) {
     const k = items.findIndex(g => g.id === curId);
     sel = k >= 0 ? k : 0;
     render();
-  } else updateInfo();
+  } else { updateInfo(); if (layout === 'ps3') xmbBuild(); }   // los recientes cambian aunque la lista de juegos no
 }
 
 // ---------- Info y recientes ----------
@@ -444,9 +709,9 @@ function back() {                                            // Esc / B: cancela
 }
 window.api.onLaunchEnd(endLaunch);
 
-// ---------- Fondo con la portada difuminada (tras 3 s sobre el mismo juego) ----------
+// ---------- Fondo con la portada difuminada (tras 1 s sobre el mismo juego) ----------
 const artEl = $('#bgart'), artCtx = artEl.getContext('2d');
-let artT = null;
+let artT = null, artBlur = 55;          // artBlur: 0 = nítida … 100 = muy difuminada (Ajustes)
 function hideArt() {
   clearTimeout(artT); artT = null;
   artEl.classList.remove('on'); document.body.classList.remove('hasart');
@@ -454,21 +719,24 @@ function hideArt() {
 function armArt() {
   hideArt();
   const it = items[sel];
-  if (!it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen()) return;
-  artT = setTimeout(() => showArt(it), 3000);
+  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen()) return;
+  artT = setTimeout(() => showArt(it), 1000);
 }
-function showArt(it) {
+// preview = true: se dibuja aunque Ajustes esté abierto (para ver el difuminado mientras mueves la barra)
+function showArt(it, preview = false) {
   const url = covers[it.id];
-  if (!url || items[sel] !== it || launching || settingsOpen()) return;
+  const ok = () => items[sel] === it && !launching && (preview || !settingsOpen());
+  if (!url || !ok()) return;
   const img = new Image();
   img.onload = () => {
-    if (items[sel] !== it || launching || settingsOpen()) return;
+    if (!ok()) return;
     const W = artEl.width, H = artEl.height, cr = W / H, ir = img.width / img.height;
     let sx = 0, sy = 0, sw = img.width, sh = img.height;
     if (ir > cr) { sw = sh * cr; sx = (img.width - sw) / 2; } else { sh = sw / cr; sy = (img.height - sh) * .3; }
+    const b = artBlur * .24, m = Math.ceil(b * 2.5);         // hasta 24 px sobre 640 px de ancho ≈ 72 px a pantalla completa; el margen evita bordes claros
     artCtx.clearRect(0, 0, W, H);
-    artCtx.filter = 'blur(4px)';                              // 4 px sobre 192 px de ancho ≈ 40 px a pantalla completa
-    artCtx.drawImage(img, sx, sy, sw, sh, -10, -10, W + 20, H + 20);
+    artCtx.filter = b > 0 ? `blur(${b.toFixed(1)}px)` : 'none';
+    artCtx.drawImage(img, sx, sy, sw, sh, -m, -m, W + 2 * m, H + 2 * m);
     artCtx.filter = 'none';
     artCtx.fillStyle = 'rgba(3,16,60,.5)'; artCtx.fillRect(0, 0, W, H);    // oscurece para que se lea el texto
     artEl.classList.add('on'); document.body.classList.add('hasart');
@@ -492,7 +760,9 @@ async function rescan() {
 }
 
 async function activate() {
-  const it = items[sel]; if (!it || launching) return;
+  if (launching) return;
+  if (layout === 'ps3' && xcats[xcat] && xcats[xcat].rows[xrow] && xcats[xcat].rows[xrow].type === 'scan') { rescan(); return; }
+  const it = items[sel]; if (!it) return;
   if (it.type === 'add') {
     const r = await window.api.add();
     if (r.status === 'added') { await load(true); const k = items.findIndex(g => g.id === r.id); if (k >= 0) go(k); }
@@ -510,6 +780,19 @@ async function changeCover() {
   const url = await window.api.setCover(it.id);
   if (url) { covers[it.id] = url; tiles[sel]._setImg(url); }
 }
+// Tecla P / gatillo izquierdo: busca en internet portadas mejores para las que se ven mal (iconos, cabeceras apaisadas, imágenes chicas)
+let upgrading = false;
+async function upgradeCovers() {
+  if (upgrading) return;
+  upgrading = true; toast('Buscando portadas mejores…', 120000);
+  try {
+    const r = await window.api.upgradeCovers();
+    if (!r.low) toast('Todas las portadas ya se ven bien');
+    else if (!r.improved) toast(`${r.low} ${r.low === 1 ? 'portada se ve' : 'portadas se ven'} mal, pero no encontré nada mejor` + (r.noKey ? ' (con una clave de SteamGridDB en Ajustes hay más opciones)' : ''), 6000);
+    else toast(`${r.improved} de ${r.low} ${r.low === 1 ? 'portada mejorada' : 'portadas mejoradas'}`);
+  } catch { toast('No se pudieron buscar portadas'); }
+  finally { upgrading = false; }
+}
 async function removeCurrent() {
   const it = items[sel];
   if (it?.type !== 'custom') return;
@@ -521,18 +804,134 @@ async function removeCurrent() {
 // ---------- Ajustes ----------
 const settings = $('#settings'), keyInput = $('#key');
 const settingsOpen = () => settings.classList.contains('open');
-function setLayout(l, save = true) {
+// Cambio de diseño. `anim` = false al arrancar (se coloca todo directo)
+function applyLayout(l) {
   layout = l;
-  document.body.classList.remove('ps4', 'center'); document.body.classList.add(l);
-  $('#b-ps4').classList.toggle('on', l === 'ps4'); $('#b-center').classList.toggle('on', l === 'center');
-  sizeTiles(); placeStatic(); place(!save);        // al cambiar con L las baldosas se deslizan; al arrancar se colocan directo
-  if (save) window.api.setCfg({ layout: l });
+  if (sel < 0) sel = 0;
+  document.body.classList.remove('ps4', 'center', 'ps3'); document.body.classList.add(l);
+  $('#b-ps4').classList.toggle('on', l === 'ps4'); $('#b-center').classList.toggle('on', l === 'center'); $('#b-ps3').classList.toggle('on', l === 'ps3');
+  Wave.theme(l === 'ps3' ? 1 : 0);
+  if (l === 'ps3') xmbBuild();
+  sizeTiles(); placeStatic(); place(true);
+}
+const LEASE = 'cubic-bezier(.22,.8,.24,1)';
+const hasBox = t => t.style.display !== 'none' && t.offsetParent !== null;
+// PS4 <-> Centrado: cada baldosa viaja de su posición y tamaño a los nuevos (FLIP), igual que el marco
+function morphTiles(l) {
+  const old = new Map();
+  tiles.forEach(t => { if (hasBox(t)) old.set(t, t.getBoundingClientRect()); });
+  const fr = $('#frame'), st = $('#strip'), ti = $('#title'), rc = $('#recent');
+  const f0 = { left: fr.style.left, top: fr.style.top, width: fr.style.width, height: fr.style.height };
+  const stWas = st.style.display !== 'none';
+  applyLayout(l);
+  const o = { duration: 480, easing: LEASE };
+  tiles.forEach(t => {
+    if (t.style.display === 'none') return;
+    const r = old.get(t), to = t.style.transform;
+    if (!r) { t.animate([{ opacity: 0 }, { opacity: 1 }], o); return; }
+    t.animate([
+      { width: r.width + 'px', height: r.height + 'px', transform: `translate3d(${r.left}px, ${r.top}px, 0) scale(1)` },
+      { width: t.style.width, height: t.style.height, transform: to }
+    ], o);
+  });
+  fr.animate([f0, { left: fr.style.left, top: fr.style.top, width: fr.style.width, height: fr.style.height }], o);
+  if (!stWas && st.style.display !== 'none') st.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 220, easing: 'ease-out', fill: 'backwards' });
+  ti.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 160, easing: 'ease-out', fill: 'backwards' });
+  if (l === 'ps4') rc.animate([{ opacity: 0, translate: '40px 0' }, { opacity: 1, translate: '0 0' }], { duration: 400, delay: 200, easing: LEASE, fill: 'backwards' });
+}
+let layoutSeq = 0, layoutPending = null, layoutOuts = [];
+async function morphViaXmb(l) {
+  const seq = ++layoutSeq; layoutPending = l;
+  const to3 = l === 'ps3';
+  // 1) sale el diseño actual
+  const outs = (to3 ? ['#tiles', '#strip', '#frame', '#title', '#recent'] : ['#xmb']).map($)
+    .map(e => e.animate([{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: to3 ? '-50px 0' : '0 -24px' }], { duration: 200, easing: 'ease-in', fill: 'forwards' }));
+  layoutOuts = outs;
+  try { await Promise.all(outs.map(a => a.finished)); } catch {}
+  outs.forEach(a => a.cancel());
+  if (seq !== layoutSeq) return;                                // otro cambio de diseño tomó el relevo
+  layoutPending = null;
+  // 2) entra el nuevo con un pequeño escalonado
+  applyLayout(l);
+  if (to3) {
+    xcEls.forEach((el, i) => el.animate([{ opacity: 0, translate: '90px 0' }, { opacity: 1, translate: '0 0' }], { duration: 420, delay: i * 55, easing: XEASE, fill: 'backwards' }));
+    xmbEnter(1);
+  } else {
+    tiles.forEach((t, i) => { if (t.style.display !== 'none') t.animate([{ opacity: 0, translate: '90px 0' }, { opacity: 1, translate: '0 0' }], { duration: 420, delay: Math.min(Math.abs(i - sel), VIS) * 32, easing: XEASE, fill: 'backwards' }); });
+    ['#frame', '#strip', '#title'].forEach(q => { const e = $(q); if (e.style.display !== 'none') e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 150, easing: 'ease-out', fill: 'backwards' }); });
+    if (l === 'ps4') $('#recent').animate([{ opacity: 0, translate: '40px 0' }, { opacity: 1, translate: '0 0' }], { duration: 400, delay: 220, easing: XEASE, fill: 'backwards' });
+  }
+}
+function setLayout(l, save = true) {
+  if (!save) { applyLayout(l); return; }                         // al arrancar: sin animación
+  if (l === layout && layoutPending === null) return;
+  if (l === layoutPending) return;
+  window.api.setCfg({ layout: l });
+  if (document.body.classList.contains('paused') || launching) { layoutSeq++; layoutPending = null; layoutOuts.forEach(a => a.cancel()); layoutOuts = []; applyLayout(l); return; }
+  if (layout === 'ps3' || l === 'ps3') morphViaXmb(l);
+  else { layoutSeq++; layoutPending = null; layoutOuts.forEach(a => a.cancel()); layoutOuts = []; morphTiles(l); }
 }
 function setBg(on, save = true) {
   document.body.classList.toggle('nobg', !on);
   $('#b-bgon').classList.toggle('on', on); $('#b-bgoff').classList.toggle('on', !on);
+  applyBgStyle();
   if (save) window.api.setCfg({ bg: on });
 }
+// Color del fondo: Original (azul PS4 / morado PS3), un color a elegir, o arcoíris con velocidad ajustable
+const SWATCHES = [['#6b4fa0', 'Violeta'], ['#2f6fe0', 'Azul'], ['#169aa8', 'Turquesa'], ['#2f9e5b', 'Verde'], ['#c99a14', 'Ámbar'], ['#e0662f', 'Naranja'], ['#d03a5a', 'Rosa'], ['#555d70', 'Gris']];
+let bgHex = '#6b4fa0';
+(() => {
+  const box = $('#sws');
+  SWATCHES.forEach(([hex, name]) => {
+    const b = document.createElement('button'); b.className = 'btn sw'; b.style.background = hex; b.title = name; b.dataset.hex = hex;
+    b.onclick = () => setBgColor(hex);
+    box.appendChild(b);
+  });
+})();
+function syncColorUI() {
+  const m = Tint.mode;
+  $('#b-cdef').classList.toggle('on', m === 'default'); $('#b-ccol').classList.toggle('on', m === 'color'); $('#b-crb').classList.toggle('on', m === 'rainbow');
+  $('#r-col').style.display = m === 'color' ? '' : 'none';
+  $('#r-spd').style.display = m === 'rainbow' ? '' : 'none';
+  $('#sws').querySelectorAll('.sw').forEach(b => b.classList.toggle('on', b.dataset.hex === bgHex));
+  $('#colpick').value = bgHex;
+}
+function setBgMode(m, save = true) {
+  Tint.set({ mode: m }); syncColorUI(); applyBgStyle();
+  if (save) window.api.setCfg({ bgMode: m });
+}
+function setBgColor(hex, save = true) {
+  bgHex = hex; Tint.set({ hex });
+  if (save && Tint.mode !== 'color') { setBgMode('color'); } else { syncColorUI(); applyBgStyle(); }
+  if (save) window.api.setCfg({ bgColor: hex });
+}
+function setBgSpeed(v, save = true) {
+  v = Math.max(1, Math.min(100, Math.round(v)));
+  Tint.set({ speed: v }); $('#spd').value = v;
+  if (save) window.api.setCfg({ bgSpeed: v });
+}
+$('#b-cdef').onclick = () => setBgMode('default');
+$('#b-ccol').onclick = () => setBgMode('color');
+$('#b-crb').onclick = () => setBgMode('rainbow');
+$('#colpick').addEventListener('input', e => { bgHex = e.target.value; Tint.set({ hex: bgHex, mode: 'color' }); syncColorUI(); applyBgStyle(); });   // vista previa mientras arrastras
+$('#colpick').addEventListener('change', e => { window.api.setCfg({ bgMode: 'color', bgColor: e.target.value }); });
+$('#spd').addEventListener('input', e => Tint.set({ speed: +e.target.value }));
+$('#spd').addEventListener('change', e => setBgSpeed(+e.target.value));
+$('#b-spm').onclick = () => setBgSpeed(+$('#spd').value - 10);
+$('#b-spp').onclick = () => setBgSpeed(+$('#spd').value + 10);
+// Difuminado del fondo con la portada (0 = nítida). Con Ajustes abierto se ve la portada del juego elegido para comparar.
+function previewArt() {
+  const it = items[sel];
+  if (layout !== 'ps3' && it && it.type !== 'add' && it.type !== 'cfg' && covers[it.id]) showArt(it, true);
+}
+function setArtBlur(v, save = true) {
+  artBlur = Math.max(0, Math.min(100, Math.round(v))); $('#blur').value = artBlur;
+  if (save) { window.api.setCfg({ artBlur }); previewArt(); }
+}
+$('#blur').addEventListener('input', e => { artBlur = +e.target.value; previewArt(); });
+$('#blur').addEventListener('change', e => setArtBlur(+e.target.value));
+$('#b-blm').onclick = () => setArtBlur(artBlur - 10);
+$('#b-blp').onclick = () => setArtBlur(artBlur + 10);
 function setAuto(on, save = true) {
   $('#b-aton').classList.toggle('on', on); $('#b-atoff').classList.toggle('on', !on); $('#r-min').classList.toggle('dim', !on);
   if (save) window.api.setCfg({ autostart: on });
@@ -548,7 +947,54 @@ function setTb(on, save = true) {
 $('#b-tbon').onclick = () => setTb(true);
 $('#b-tboff').onclick = () => setTb(false);
 $('#b-quit').onclick = () => window.api.quit();
+
+// ---------- Actualizaciones ----------
+let curVer = '', newVer = '', updHideT = null, updDoing = false;
+function updUI() {
+  $('#updinfo').textContent = 'Versión ' + curVer + (newVer ? ' · disponible la ' + newVer : '');
+  $('#b-updgo').style.display = newVer ? '' : 'none';
+}
+function updCard(show) {
+  clearTimeout(updHideT);
+  if (show) { $('#upd-t').textContent = 'Nueva versión ' + newVer + ' disponible'; updHideT = setTimeout(() => { if (!updDoing) updCard(false); }, 20000); }
+  $('#upd').classList.toggle('on', show);
+}
+async function updFound(version, auto) {
+  newVer = version; updUI();
+  const c = await window.api.getCfg();
+  if (!auto || c.updSkip !== version) { if (!launching) updCard(true); }          // el aviso sale una vez por versión; en Ajustes siempre queda disponible
+}
+async function updCheckNow() {
+  const b = $('#b-updchk'); b.disabled = true; b.textContent = 'Buscando…';
+  const r = await window.api.updCheck();
+  b.disabled = false; b.textContent = 'Buscar actualizaciones';
+  if (!r.ok) return toast(r.error, 3600);
+  if (r.available) { newVer = r.version; updUI(); toast('Hay una versión nueva: ' + r.version, 3200); }
+  else { newVer = ''; updUI(); toast('Ya tienes la última versión (' + r.current + ')', 3200); }
+}
+async function updGo() {
+  if (updDoing || !newVer) return;
+  updDoing = true; clearTimeout(updHideT);
+  $('#upd-t').textContent = 'Descargando ' + newVer + '…'; $('#upd-s').textContent = 'No cierres el launcher'; $('#upd .pb i').style.width = '0';
+  $('#upd').classList.add('busy', 'on');
+  closeSettings();
+  const r = await window.api.updInstall();
+  if (!r.ok) {                                                                     // si todo va bien, el programa se cierra solo
+    updDoing = false; $('#upd').classList.remove('busy'); $('#upd-s').textContent = 'Se cerrará y se abrirá la versión nueva';
+    updCard(false); toast('No se pudo actualizar: ' + r.error, 4500);
+  }
+}
+$('#upd-go').onclick = updGo;
+$('#b-updgo').onclick = updGo;
+$('#b-updchk').onclick = updCheckNow;
+$('#upd-no').onclick = () => { updCard(false); window.api.setCfg({ updSkip: newVer }); };
+window.api.onUpdAvailable(v => updFound(v.version, true));
+window.api.onUpdProgress(p => {
+  $('#upd .pb i').style.width = p + '%';
+  $('#upd-t').textContent = p >= 100 ? 'Instalando…' : 'Descargando ' + newVer + '… ' + p + '%';
+});
 $('#b-ps4').onclick = () => setLayout('ps4');
+$('#b-ps3').onclick = () => setLayout('ps3');
 $('#b-center').onclick = () => setLayout('center');
 $('#b-bgon').onclick = () => setBg(true);
 $('#b-bgoff').onclick = () => setBg(false);
@@ -612,10 +1058,11 @@ addEventListener('keydown', e => {
   if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
   if (launching) { if (k === 'Escape') back(); return; }     // esperando al juego: solo Esc (cancelar)
-  if (k === 'ArrowRight' || k === 'ArrowLeft') {
+  if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'ArrowUp' || k === 'ArrowDown') {
     const now = performance.now();
     if (e.repeat && now - lastStep < 100) return;      // mantener la flecha: un paso cada ~100 ms, así cada transición llega a verse
-    lastStep = now; go(sel + (k === 'ArrowRight' ? 1 : -1));
+    lastStep = now;
+    step(k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0);
   }
   else if (k === 'Home') go(0);
   else if (k === 'End') go(items.length - 1);
@@ -624,7 +1071,8 @@ addEventListener('keydown', e => {
   else if (k === 'Delete') removeCurrent();
   else if (k.toLowerCase() === 'c') changeCover();
   else if (k.toLowerCase() === 's') rescan();
-  else if (k.toLowerCase() === 'l') setLayout(layout === 'ps4' ? 'center' : 'ps4');
+  else if (k.toLowerCase() === 'p') upgradeCovers();
+  else if (k.toLowerCase() === 'l') setLayout(nextLayout());
   else if (k.toLowerCase() === 'f') toggleFps();
 });
 
@@ -632,7 +1080,7 @@ addEventListener('keydown', e => {
 // Funciona con Xbox, PlayStation, Nintendo y cualquier mando con disposición "standard" sin configurar nada.
 // Con mandos de otro tipo (sin esa disposición) se usa Ajustes > Configurar botones; se guarda por mando.
 // La ayuda de la parte de arriba muestra los botones del último dispositivo usado (teclado o el mando que hayas tocado).
-const STD = { ok: [{ b: 0 }], back: [{ b: 1 }], remove: [{ b: 2 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }],
+const STD = { ok: [{ b: 0 }], back: [{ b: 1 }], remove: [{ b: 2 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }],
   up: [{ b: 12 }, { a: 1, s: -1 }], down: [{ b: 13 }, { a: 1, s: 1 }], left: [{ b: 14 }, { a: 0, s: -1 }], right: [{ b: 15 }, { a: 0, s: 1 }] };
 const PROFILES = {
   xbox: STD, ps: STD,
@@ -640,9 +1088,9 @@ const PROFILES = {
   generic: { ...STD, up: [{ a: 1, s: -1 }], down: [{ a: 1, s: 1 }], left: [{ a: 0, s: -1 }], right: [{ a: 0, s: 1 }] }
 };
 const LABELS = {
-  xbox: { ok: 'A', back: 'B', remove: 'X', cover: 'Y', scan: 'LB', layout: 'RB' },
-  ps: { ok: '✕', back: '○', remove: '□', cover: '△', scan: 'L1', layout: 'R1' },
-  nin: { ok: 'A', back: 'B', remove: 'X', cover: 'Y', scan: 'L', layout: 'R' }
+  xbox: { ok: 'A', back: 'B', remove: 'X', cover: 'Y', scan: 'LB', layout: 'RB', upgrade: 'LT' },
+  ps: { ok: '✕', back: '○', remove: '□', cover: '△', scan: 'L1', layout: 'R1', upgrade: 'L2' },
+  nin: { ok: 'A', back: 'B', remove: 'X', cover: 'Y', scan: 'L', layout: 'R', upgrade: 'ZL' }
 };
 const KIND_NAME = { xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo', generic: 'Mando genérico' };
 let padMaps = {}, padIdx = -1, padSig = {}, hintKey = 'kb';
@@ -661,7 +1109,7 @@ function labelsOf(gp) {
   const k = kindOf(gp);
   if (LABELS[k] && !padMaps[gp.id]) return LABELS[k];
   const P = profileOf(gp);
-  return { ok: lbl(P.ok[0]), back: lbl(P.back[0]), remove: lbl(P.remove[0]), cover: lbl(P.cover[0]), scan: lbl(P.scan[0]), layout: lbl(P.layout[0]) };
+  return { ok: lbl(P.ok[0]), back: lbl(P.back[0]), remove: lbl(P.remove[0]), cover: lbl(P.cover[0]), scan: lbl(P.scan[0]), layout: lbl(P.layout[0]), upgrade: lbl(P.upgrade?.[0]) };
 }
 function setHint(gp) {                                        // gp = null -> teclado
   const key = gp ? gp.id + (padMaps[gp.id] ? '*' : '') : 'kb';
@@ -669,7 +1117,7 @@ function setHint(gp) {                                        // gp = null -> te
   hintKey = key;
   if (!gp) { $('#hint').innerHTML = hintKb; return; }
   const L = labelsOf(gp), s = ' &nbsp; ';
-  $('#hint').innerHTML = `${L.ok} jugar${s}${L.scan} buscar juegos${s}${L.cover} portada${s}${L.layout} diseño${s}${L.remove} quitar${s}${L.back} cerrar`;
+  $('#hint').innerHTML = `${L.ok} jugar${s}${L.scan} buscar juegos${s}${L.cover} portada${s}${L.upgrade} mejorar portadas${s}${L.layout} diseño${s}${L.remove} quitar${s}${L.back} cerrar`;
 }
 const padList = () => [...(navigator.getGamepads() || [])].filter(Boolean);
 const curPad = () => { const l = padList(); return l.find(g => g.index === padIdx) || l[0] || null; };
@@ -687,7 +1135,10 @@ function bound(gp, bd) {
 }
 const sigOf = g => g.buttons.map(b => b.pressed ? 1 : 0).join('') + '|' + g.axes.map(a => Math.abs(a) > .6 ? 1 : 0).join('');
 
-let prev = {}, lastMove = 0, heldDir = 0, heldAt = 0, pollT = null;
+let prev = {}, pollT = null;
+// Mantener pulsado: primer paso al instante y luego repetición (más rápida pasado ~0,45 s); una instancia por eje
+const mkRep = () => { let d = 0, at = 0, last = 0; return (dir, now, fn) => { if (!dir) d = 0; else if (dir !== d) { d = dir; at = last = now; fn(dir); } else if (now - last > (now - at > 450 ? 110 : 170)) { fn(dir); last = now; } }; };
+const repH = mkRep(), repV = mkRep();
 const edge = (k, v, fn) => { if (v && !prev[k]) fn(); prev[k] = v; };
 
 function padFocus(d) {                                        // navegar por Ajustes con la cruceta
@@ -721,18 +1172,17 @@ function poll() {
   if (launching) { edge('back', on('back'), back); return; }
   edge('ok', on('ok'), activate); edge('back', on('back'), back);
   edge('remove', on('remove'), removeCurrent); edge('cover', on('cover'), changeCover); edge('scan', on('scan'), rescan);
-  edge('layout', on('layout'), () => setLayout(layout === 'ps4' ? 'center' : 'ps4'));
-  const dir = on('right') ? 1 : on('left') ? -1 : 0;
-  if (!dir) heldDir = 0;
-  else if (dir !== heldDir) { heldDir = dir; heldAt = lastMove = now; go(sel + dir); }
-  else if (now - lastMove > (now - heldAt > 450 ? 110 : 170)) { go(sel + dir); lastMove = now; }
+  edge('layout', on('layout'), () => setLayout(nextLayout()));
+  edge('upgrade', on('upgrade'), upgradeCovers);
+  repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => step(d, 0));
+  repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => step(0, d));
 }
 const startPoll = () => { if (!pollT) pollT = setInterval(poll, 33); };
 const stopPoll = () => { clearInterval(pollT); pollT = null; };
 
 // ----- Asistente: asignar los botones de un mando que no es estándar -----
 const WIZ = [['ok', 'Aceptar / jugar'], ['back', 'Atrás / cerrar'], ['remove', 'Quitar juego'], ['cover', 'Cambiar portada'],
-  ['scan', 'Buscar juegos'], ['layout', 'Cambiar diseño'], ['left', 'Mover a la izquierda'], ['right', 'Mover a la derecha']];
+  ['scan', 'Buscar juegos'], ['layout', 'Cambiar diseño'], ['upgrade', 'Mejorar portadas'],['left', 'Mover a la izquierda'], ['right', 'Mover a la derecha']];
 let wiz = null;
 function wizRender() {
   $('#pw-t').innerHTML = `Pulsa el botón para<br><b>${WIZ[wiz.step][1]}</b>`;
@@ -807,7 +1257,7 @@ window.api.onStats(s => {
   const p = v => v == null ? '--%' : Math.round(v) + '%';
   const t = v => v == null ? '--°' : Math.round(v) + '°';
   const g = n => (n / 1073741824).toFixed(1);
-  $('#stats').textContent = `CPU ${p(s.cpu.use)}  |  RAM ${g(s.ram.used)}/${Math.round(g(s.ram.total))} GB  |  GPU ${p(s.gpu.use)} ${t(s.gpu.temp)}`;
+  $('#stats').textContent = `CPU ${p(s.cpu.use)}   RAM ${g(s.ram.used)}/${Math.round(g(s.ram.total))} GB   GPU ${p(s.gpu.use)} ${t(s.gpu.temp)}`;
 });
 
 // ---------- Optimización de gráficos (solo la primera vez) ----------
@@ -880,14 +1330,20 @@ window.api.onResume(() => {
 // ---------- Inicio ----------
 (async () => {
   const c = await window.api.getCfg();
+  curVer = c.version; updUI();
   $('#uname').textContent = c.user; $('#avatar').textContent = (c.user[0] || '?').toUpperCase();
-  setLayout(c.layout === 'center' ? 'center' : 'ps4', false);
+  setLayout(c.layout === 'center' || c.layout === 'ps3' ? c.layout : 'ps4', false);
+  bgHex = /^#[0-9a-f]{6}$/i.test(c.bgColor) ? c.bgColor : bgHex;
+  Tint.set({ mode: c.bgMode || 'default', hex: bgHex, speed: Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30 });
+  $('#spd').value = Number.isFinite(c.bgSpeed) ? c.bgSpeed : 30;
+  syncColorUI();
+  setArtBlur(Number.isFinite(c.artBlur) ? c.artBlur : 55, false);
   setBg(c.bg !== false, false);
   setAuto(!!c.autostart, false); setMin(!!c.minimized, false); setTb(c.hideTaskbar !== false, false);
   padMaps = c.padMaps || {};
   resize();
   window.api.onLibrary(() => load());
-  window.api.onCover(({ id, url }) => { covers[id] = url; const k = items.findIndex(g => g.id === id); if (k >= 0 && tiles[k]?._setImg) tiles[k]._setImg(url); });
+  window.api.onCover(({ id, url }) => { covers[id] = url; const k = items.findIndex(g => g.id === id); if (k >= 0 && tiles[k]?._setImg) tiles[k]._setImg(url); if (k === sel && !settingsOpen()) armArt(); });
   await load(true);
   hintEmpty();
 })();

@@ -1,8 +1,10 @@
-name: Build instalador
+name: Build PS-Launcher.exe
 on:
   push:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -15,5 +17,19 @@ jobs:
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
-          name: PS-Launcher-instalador
-          path: dist/*.exe
+          name: PS-Launcher
+          path: dist/PS-Launcher.exe
+      # Publica (o actualiza) la release v<version de package.json>: el launcher la detecta y ofrece actualizar
+      - name: Leer versión
+        id: ver
+        shell: bash
+        # Fuera de GitHub (compilación local) no existe GITHUB_OUTPUT: solo se muestra la versión
+        run: |
+          v=$(node -p "require('./package.json').version")
+          echo "Versión: $v"
+          if [ -n "$GITHUB_OUTPUT" ]; then echo "v=$v" >> "$GITHUB_OUTPUT"; fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          name: PS Launcher ${{ steps.ver.outputs.v }}
+          files: dist/PS-Launcher.exe

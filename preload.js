@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   removeFolder: p => ipcRenderer.invoke('removeFolder', p),
   remove: id => ipcRenderer.invoke('remove', id),
   setCover: id => ipcRenderer.invoke('setCover', id),
+  upgradeCovers: () => ipcRenderer.invoke('upgradeCovers'),
   getCfg: () => ipcRenderer.invoke('getCfg'),
   setCfg: p => ipcRenderer.invoke('setCfg', p),
   gpuInfo: () => ipcRenderer.invoke('gpuInfo'),
@@ -27,5 +28,9 @@ contextBridge.exposeInMainWorld('api', {
   onCover: cb => ipcRenderer.on('cover', (e, c) => cb(c)),
   onLaunchEnd: cb => ipcRenderer.on('launch-end', () => cb()),
   onLibrary: cb => ipcRenderer.on('library', () => cb()),
+  updCheck: () => ipcRenderer.invoke('updCheck'),
+  updInstall: () => ipcRenderer.invoke('updInstall'),
+  onUpdAvailable: cb => ipcRenderer.on('upd-available', (e, v) => cb(v)),
+  onUpdProgress: cb => ipcRenderer.on('upd-progress', (e, p) => cb(p)),
   onStats: cb => ipcRenderer.on('stats', (e, s) => cb(s))
 });
