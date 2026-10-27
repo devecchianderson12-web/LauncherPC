@@ -889,7 +889,39 @@ ipcMain.handle('setCover', async (e, id) => {
 });
 ipcMain.handle('upgradeCovers', upgradeCovers);
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, user: os.userInfo().username }));
+// ---------- Video de fondo ----------
+// Se elige en dos pasos para que la interfaz pueda avisar "Copiando…": el archivo se copia a la carpeta de datos
+// (sigue funcionando aunque muevas o borres el original). Solo se copia la ruta que salió del diálogo, nunca una que mande la interfaz.
+const vidDir = () => path.join(userDir(), 'bgvideo');
+const VID_EXT = ['mp4', 'webm', 'mkv', 'mov', 'm4v'];
+let pendingVideo = null;
+function bgVideoUrl() {
+  const f = cfg.bgVideo && path.join(vidDir(), path.basename(cfg.bgVideo));
+  return f && fs.existsSync(f) ? coverUrl(f) : '';
+}
+ipcMain.handle('chooseVideo', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Elige un video para el fondo', properties: ['openFile'], filters: [{ name: 'Videos', extensions: VID_EXT }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  pendingVideo = r.filePaths[0];
+  let size = 0; try { size = fs.statSync(pendingVideo).size; } catch {}
+  return { name: path.basename(pendingVideo), size };
+});
+ipcMain.handle('useVideo', async () => {
+  const src = pendingVideo; pendingVideo = null;
+  if (!src) return { error: 'No hay ningún video elegido' };
+  const ext = path.extname(src).slice(1).toLowerCase();
+  if (!VID_EXT.includes(ext)) return { error: 'Formato de video no compatible' };
+  try {
+    fs.mkdirSync(vidDir(), { recursive: true });
+    const name = 'fondo-' + Date.now() + '.' + ext, dst = path.join(vidDir(), name);
+    await fs.promises.copyFile(src, dst);
+    for (const f of fs.readdirSync(vidDir())) if (f !== name) { try { fs.unlinkSync(path.join(vidDir(), f)); } catch {} }   // solo se guarda el último
+    cfg.bgVideo = name; cfg.bgType = 'video'; saveCfg();
+    return { url: bgVideoUrl() };
+  } catch (e) { return { error: 'No se pudo copiar el video (¿falta espacio?)' }; }
+});
+
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
   if (patch.layout === 'ps4' || patch.layout === 'center' || patch.layout === 'ps3') cfg.layout = patch.layout;
@@ -902,7 +934,9 @@ ipcMain.handle('setCfg', (e, patch) => {
   if (['default', 'color', 'rainbow'].includes(patch.bgMode)) cfg.bgMode = patch.bgMode;
   if (typeof patch.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(patch.bgColor)) cfg.bgColor = patch.bgColor;
   if (Number.isFinite(patch.bgSpeed)) cfg.bgSpeed = Math.max(1, Math.min(100, Math.round(patch.bgSpeed)));
-  if (Number.isFinite(patch.artBlur)) cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
+  if (['classic', 'ps3', 'video'].includes(patch.bgType)) cfg.bgType = patch.bgType;
+  if (patch.btnStyle === 'min' || patch.btnStyle === 'color') cfg.btnStyle = patch.btnStyle;
+  if (Number.isFinite(patch.artBlur))cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
   saveCfg();
   if ('hideTaskbar' in patch) syncTaskbar();
   if ('autostart' in patch || 'minimized' in patch) applyAutostart();

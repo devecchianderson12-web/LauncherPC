@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('api', {
   remove: id => ipcRenderer.invoke('remove', id),
   setCover: id => ipcRenderer.invoke('setCover', id),
   upgradeCovers: () => ipcRenderer.invoke('upgradeCovers'),
+  chooseVideo: () => ipcRenderer.invoke('chooseVideo'),
+  useVideo: () => ipcRenderer.invoke('useVideo'),
   getCfg: () => ipcRenderer.invoke('getCfg'),
   setCfg: p => ipcRenderer.invoke('setCfg', p),
   gpuInfo: () => ipcRenderer.invoke('gpuInfo'),

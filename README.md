@@ -68,6 +68,22 @@ Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece d
 al moverte, vuelve el fondo de cintas. **Ajustes > Difuminado de la portada** regula cuánto se difumina (0 = nítida); mientras movés la barra
 se ve la portada del juego elegido para comparar.
 
+## Tipo de fondo (Ajustes > Fondo)
+- **Fondo clásico**: las cintas de seda de siempre.
+- **Fondo original PS3**: recreación del fondo del XMB: degradado en diagonal, una ola fina de muchas hebras que se retuercen
+  y destellos que titilan. Morado en el diseño PS3 y azul en PS4/Centrado; también sigue el **Color del fondo** (color elegido o arcoíris).
+  Se dibuja a 60 % de resolución (las hebras son finas) y a 30 fps, y se detiene igual que el clásico.
+- **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)
+  y se reproduce sin sonido y en bucle. Se pausa con la portada de fondo, esperando un juego, con el launcher oculto o pausado.
+  Si cancelás el diálogo se vuelve al último video subido. Si el formato no se puede reproducir, vuelve al fondo clásico.
+- Con **Fondo animado: No** siempre se ve un color liso, elijas el tipo que elijas.
+
+## Botones de la ayuda (Ajustes > Botones de la ayuda)
+La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ □ △ / A B X Y), **píldora** para L1, RB, ZL… y **tecla** para el teclado.
+- **Minimalista**: contorno blanco.
+- **Colores**: como el mando detectado. Xbox con A verde, B roja, X azul, Y amarilla; PlayStation con los símbolos de color sobre negro;
+  Nintendo y genéricos en oscuro; las teclas en claro.
+
 ## Mejorar portadas (tecla P / LT · L2 · ZL)
 Revisa todas las portadas y, las que se ven mal (faltan, son chicas, o son apaisadas como la cabecera de Steam o el icono del .exe),
 las busca en internet en formato vertical 600x900: Steam (por appid), SteamGridDB (si hay clave en Ajustes) y la tienda de Steam
