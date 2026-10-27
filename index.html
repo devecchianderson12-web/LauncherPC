@@ -1154,8 +1154,8 @@ function pkHint() {
   $('#pk-foot').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('') + (gp ? '' : '<span class="hk">Clic derecho: atrás</span>');
 }
 // ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
-// Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 9 imágenes horizontales (3x3) de internet o de su carpeta
-// que superan 1280x720. Aceptar aplica la marcada · atrás / △ / Esc cierra. Sin resultados ofrece buscar en el PC.
+// Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 9 portadas (3x3) de internet o de su carpeta
+// de 600x900 o más (nunca menos). Aceptar aplica la marcada · atrás / △ / Esc cierra. Sin resultados ofrece buscar en el PC.
 const hdEl = $('#hdpick'), hdCards = $('#hd-cards');
 const hdOpen = () => hdEl.classList.contains('open');
 let hd = null;
@@ -1167,14 +1167,14 @@ async function upgradeCovers() {
   hd = { it, info, opts: [], f: 0, seq: 1, busy: false, none: false };
   $('#hd-title').textContent = it.name;
   $('#hd-sub').textContent = `Portada actual: ${info.res}` + (info.hd ? ' · ya está en HD, podés cambiarla igual' : '');
-  hdCards.innerHTML = '<div id="hd-msg">Buscando imágenes horizontales de 1280x720 o más…</div>';
+  hdCards.innerHTML = '<div id="hd-msg">Buscando portadas de 600x900 o más…</div>';
   hideArt(); hdEl.classList.add('open'); hdHint();
   const seq = hd.seq, opts = await window.api.hdOptions(it.id);
   if (!hd || hd.seq !== seq) return;
   hd.opts = opts.filter(o => o.preview);
   if (!hd.opts.length) {
     hd.none = true; hdHint();
-    hdCards.innerHTML = '<div id="hd-msg">No encontré imágenes de 1280x720 o más para este juego.' +
+    hdCards.innerHTML = '<div id="hd-msg">No encontré portadas de 600x900 o más para este juego.' +
       (info.key ? '' : '<small>Con una clave gratis de SteamGridDB (Ajustes) se buscan también juegos que no están en Steam.</small>') + '</div>';
     return;
   }
