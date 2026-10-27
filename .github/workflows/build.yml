@@ -14,6 +14,13 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      # Clave de SteamGridDB para las portadas automáticas: sale del secreto SGDB_KEY del repositorio (no está en el código).
+      # Sin el secreto (o compilando en local) se escribe vacía y el launcher usa solo Steam y la clave de Ajustes.
+      - name: Clave de SteamGridDB
+        shell: bash
+        env:
+          SGDB_KEY: ${{ secrets.SGDB_KEY }}
+        run: node -e "require('fs').writeFileSync('build-key.json', JSON.stringify({ sgdb: process.env.SGDB_KEY || '' }))"
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:

@@ -5,3 +5,4 @@ dist/
 # zip del proyecto y su copia descomprimida
 *.zip
 /LauncherPC-main/
+build-key.json

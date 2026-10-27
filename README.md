@@ -117,6 +117,16 @@ La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ �
 - **Colores**: como el mando detectado. Xbox con A verde, B roja, X azul, Y amarilla; PlayStation con los símbolos de color sobre negro;
   Nintendo y genéricos en oscuro; las teclas en claro.
 
+## Portadas automáticas (sin configurar nada)
+Al abrir el launcher (8 s después, sin trabar el arranque), después de buscar juegos con **S** y al agregar juegos, recorre los que
+no tienen portada o la tienen por debajo de **600x900** y les pone sola la mejor que encuentre: primero una vertical (como portada),
+si no la primera que llegue a 600x900. Las elegidas a mano no se tocan; cada juego se intenta como mucho una vez por semana.
+- **Clave de SteamGridDB incluida**: el .exe trae una clave (de una cuenta aparte) para que en cualquier PC, sin Steam ni cuentas,
+  haya portadas de SteamGridDB (decenas por juego, también de juegos que no están en Steam). **No está en el código**: es el secreto
+  `SGDB_KEY` del repositorio y el workflow la escribe en `build-key.json` (ignorado por git) al compilar. Si el usuario pega su
+  propia clave en Ajustes, se usa esa. Sin clave (por ejemplo compilando en local), el launcher usa solo Steam.
+- Para cambiar la clave incluida: GitHub → el repositorio → Settings → Secrets and variables → Actions → `SGDB_KEY`, y publicar otra versión.
+
 ## Portada en HD (tecla P / LT · L2 · ZL)
 Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 50 portadas
 de 600x900 o más** (nunca menos: 600 de ancho y 900 de alto como mínimo), en una cuadrícula de 5 columnas con scroll, con su resolución

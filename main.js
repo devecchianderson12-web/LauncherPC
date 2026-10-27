@@ -215,6 +215,7 @@ async function doScan() {
   if (added || changed || removed || !fs.existsSync(libFile())) saveLib();
   coverFail.clear();
   prefetchCovers([...found, ...cfg.custom.map(c => ({ ...c, type: 'custom' }))]);   // solo tras pulsar S: las portadas que faltan
+  setTimeout(autoCovers, 4000);                  // después de buscar juegos: portadas de los nuevos o bajas
   return { added, changed, removed, total: found.length };
 }
 
@@ -224,6 +225,7 @@ async function prefetchCovers(list) {
     const url = await getCover(g).catch(() => null);
     if (url && win && !win.isDestroyed()) win.webContents.send('cover', { id: g.id, url });
   }
+  autoCovers();                                    // juegos recién agregados: si su portada quedó baja, se mejora sola
 }
 // La interfaz pide portadas solo de la caché del disco: nunca descarga nada por su cuenta
 const cachedCover = item => { const f = coverFile(item.id); return fs.existsSync(f) ? coverUrl(f) : null; };
@@ -362,10 +364,16 @@ async function steamFind(g) {
   return p;
 }
 
+// Clave de SteamGridDB: la que el usuario pegue en Ajustes, o si no la incluida en el .exe. La incluida NO está en el
+// código: GitHub la escribe en build-key.json desde el secreto SGDB_KEY del repositorio al compilar (ver el workflow).
+let bundledKey = '';
+try { bundledKey = String(require('./build-key.json').sgdb || '').trim(); } catch {}
+const sgdbKey = () => (cfg && cfg.apiKey) || bundledKey;
+
 // Con appid (juegos de Steam) se busca directamente por su id de Steam; si no, por nombre
 async function steamGridCover(name, appid) {
-  if (!cfg.apiKey) return null;
-  const h = { Authorization: 'Bearer ' + cfg.apiKey };
+  if (!sgdbKey()) return null;
+  const h = { Authorization: 'Bearer ' + sgdbKey() };
   const grid = async p => { const g = await (await fetch(`https://www.steamgriddb.com/api/v2/grids/${p}?dimensions=600x900`, { headers: h, signal: AbortSignal.timeout(8000) })).json(); return g?.data?.[0]?.url || null; };
   let url = null;
   if (appid) { try { url = await grid('steam/' + appid); } catch {} }
@@ -517,7 +525,7 @@ async function probeSize(url) {
 // Ajustes; es donde más opciones hay), todas las capturas de Steam (1920x1080) e imágenes grandes de la carpeta del juego.
 // Se muestra una miniatura de cada una; el tamaño real se lee de la cabecera y la imagen entera se baja solo al elegirla.
 const HD_MAX = 50;
-async function hdCandidates(g) {
+async function hdCandidates(g, max = HD_MAX) {      // max: las portadas automáticas piden pocas
   const list = [];                                            // { url | file, preview, src, w?, h? }
   const appid = await steamAppFor(g).catch(() => null);
   if (appid) {
@@ -526,9 +534,9 @@ async function hdCandidates(g) {
     list.push({ url: b + 'library_600x900_2x.jpg', preview: b + 'library_600x900.jpg', src: 'Portada de Steam' });
     list.push({ url: b + 'library_hero_2x.jpg', preview: b + 'library_hero.jpg', src: 'Arte de Steam' });
   }
-  if (cfg.apiKey) {
+  if (sgdbKey()) {
     try {
-      const h = { Authorization: 'Bearer ' + cfg.apiKey }, get = async p => (await (await fetch('https://www.steamgriddb.com/api/v2/' + p, { headers: h, signal: AbortSignal.timeout(10000) })).json())?.data || [];
+      const h = { Authorization: 'Bearer ' + sgdbKey() }, get = async p => (await (await fetch('https://www.steamgriddb.com/api/v2/' + p, { headers: h, signal: AbortSignal.timeout(10000) })).json())?.data || [];
       let gid = null;
       if (appid) { try { gid = (await (await fetch(`https://www.steamgriddb.com/api/v2/games/steam/${appid}`, { headers: h, signal: AbortSignal.timeout(8000) })).json())?.data?.id; } catch {} }
       if (!gid) gid = (await get('search/autocomplete/' + encodeURIComponent((await gameNames(g))[0] || g.name)))[0]?.id;
@@ -549,7 +557,7 @@ async function hdCandidates(g) {
   // Tamaño real de cada una (de a 8): lo que no llega a 600x900 se descarta; de SteamGridDB ya viene en la respuesta
   const seen = new Set(), out = [];
   const todo = list.filter(c => { const k = c.url || c.file; if (seen.has(k)) return false; seen.add(k); return true; });
-  for (let i = 0; i < todo.length && out.length < HD_MAX; i += 8) {
+  for (let i = 0; i < todo.length && out.length < max; i += 8) {
     const got = await Promise.all(todo.slice(i, i + 8).map(async c => {
       try {
         if (c.file) {
@@ -561,7 +569,7 @@ async function hdCandidates(g) {
         return isHD(s) ? { ...c, w: s.width, h: s.height } : null;
       } catch { return null; }
     }));
-    for (const c of got) if (c && out.length < HD_MAX) out.push(c);
+    for (const c of got) if (c && out.length < max) out.push(c);
   }
   return out;
 }
@@ -572,7 +580,7 @@ function hdInfo(id) {
   const g = listGames().find(x => x.id === id);
   if (!g) return null;
   const s = coverRes(id);
-  return { id, name: g.name, res: s ? s.width + 'x' + s.height : 'sin portada', hd: isHD(s), key: !!cfg.apiKey };
+  return { id, name: g.name, res: s ? s.width + 'x' + s.height : 'sin portada', hd: isHD(s), key: !!sgdbKey() };
 }
 async function hdOptions(id) {
   const g = listGames().find(x => x.id === id);
@@ -594,6 +602,41 @@ function saveCover(id, buf) {
     try { fs.unlinkSync(hdFile(id)); } catch {}
   }
 }
+// ---------- Portadas automáticas ----------
+// Al abrir el launcher (y después de buscar juegos con S) recorre los juegos sin portada o con portada baja (< 600x900)
+// y les pone sola la mejor que encuentre: primero una vertical (como portada), si no la primera que llegue a 600x900.
+// Las elegidas a mano no se tocan. Cada juego se intenta como mucho una vez por semana. De a 3 juegos, sin apuro.
+let autoBusy = false;
+async function autoCovers() {
+  if (autoBusy || !cfg) return;
+  autoBusy = true;
+  try {
+    const tried = cfg.autoTried || (cfg.autoTried = {}), manual = cfg.manualCovers || {}, now = Date.now();
+    const low = listGames().filter(g => !manual[g.id] && !isHD(coverRes(g.id)) && !(tried[g.id] > now - 7 * 864e5));
+    let n = 0;
+    for (let i = 0; i < low.length; i += 3) {
+      await Promise.all(low.slice(i, i + 3).map(async g => {
+        tried[g.id] = now;
+        try {
+          const list = await hdCandidates(g, 6);
+          const pick = list.find(c => c.h >= c.w * 1.2) || list[0];
+          if (!pick) return;
+          const buf = pick.file ? await fs.promises.readFile(pick.file) : await download(pick.url);
+          if (!isHD(imgSize(buf))) return;                           // nunca menos de 600x900
+          saveCover(g.id, buf);
+          coverFail.delete(g.id);
+          const lg = lib.games.find(x => x.id === g.id);
+          if (lg && lg.cover !== coverFile(g.id)) { lg.cover = coverFile(g.id); saveLib(); }
+          n++;
+          if (win && !win.isDestroyed()) win.webContents.send('cover', { id: g.id, url: coverUrl(coverFile(g.id)) });
+        } catch {}
+      }));
+    }
+    saveCfg();
+    if (n) note(`${n} ${n === 1 ? 'portada mejorada' : 'portadas mejoradas'} automáticamente`);
+  } finally { autoBusy = false; }
+}
+
 // La imagen entera se baja recién al elegirla, y se vuelve a comprobar que llegue a 600x900
 async function hdApply(id, i) {
   const c = (await hdCands.get(id))?.[i];
@@ -1361,7 +1404,9 @@ app.whenReady().then(() => {
   createWin();
   startShell();
 
-  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')).resize({ width: 16, height: 16 }));
+  // En Windows el .ico trae cada tamaño dibujado aparte (16, 20, 24, 32…): la bandeja usa el justo, sin achicar con dientes
+  const trayIco = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  tray = new Tray(process.platform === 'win32' ? nativeImage.createFromPath(trayIco) : nativeImage.createFromPath(trayIco).resize({ width: 16, height: 16 }));
   tray.setToolTip('PS Launcher');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Abrir', click: showLauncher },
@@ -1373,6 +1418,7 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => {
     if (cfg.tune && cfg.tune.pending) { cfg.tune.pending = false; delete cfg.tune.pendingMode; saveCfg(); }   // este modo gráfico arrancó bien
     if (!process.argv.includes('--hidden')) showLauncher();
+    setTimeout(autoCovers, 8000);                 // portadas automáticas al abrir (sin trabar el arranque)
   });
   // Borra restos de una actualización fallida y comprueba si hay versión nueva (unos segundos después de abrir, y cada 6 h)
   try { if (process.env.PORTABLE_EXECUTABLE_FILE) fs.unlinkSync(path.join(path.dirname(process.env.PORTABLE_EXECUTABLE_FILE), 'PS-Launcher.update.exe')); } catch {}

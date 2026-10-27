@@ -1,7 +1,7 @@
 {
   "name": "ps-launcher",
   "productName": "PS Launcher",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "Launcher de juegos con interfaz estilo PS4",
   "main": "main.js",
   "scripts": {
@@ -20,11 +20,12 @@
       "lhm.js",
       "preload.js",
       "index.html",
-      "assets/**"
+      "assets/**",
+      "build-key.json"
     ],
     "win": {
       "target": "portable",
-      "icon": "assets/icon.png",
+      "icon": "assets/icon.ico",
       "artifactName": "PS-Launcher.${ext}"
     },
     "asarUnpack": [

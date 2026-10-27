@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Icono de PS Launcher: fondo azul en degradado y los símbolos □ ✕ ○ en blanco (vectorial: se ve nítido en cualquier tamaño) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1767c4"/>
+      <stop offset="1" stop-color="#1b3a9c"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="44" fill="url(#bg)"/>
+  <g fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="46" y="46" width="72" height="72" rx="3"/>
+    <path d="M50 142 L114 206 M114 142 L50 206"/>
+    <circle cx="176" cy="174" r="34"/>
+  </g>
+</svg>
