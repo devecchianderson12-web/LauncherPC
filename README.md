@@ -91,7 +91,9 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
 ## Tipo de fondo (Ajustes > Fondo)
 - **Fondo clásico**: las cintas de seda de siempre.
 - **Fondo original PS3**: el **video original de la ola del XMB** (`assets/xmb-wave.mp4`, 1080p, 16 s en bucle, sin sonido), que viene
-  dentro del .exe (fuera del .asar, ver `asarUnpack` en `package.json`). Cada cuadro se sube a una textura y el shader lo **tiñe**:
+  dentro del .exe (fuera del .asar, ver `asarUnpack` en `package.json`). El video es un 720p estirado y muy comprimido (~1 Mbit/s),
+  así que el shader lo **mejora** en la GPU: realza los bordes donde hay detalle (la ola, los pliegues, los destellos) y suaviza los
+  bloques del fondo liso. Cada cuadro se sube a una textura y el shader lo **tiñe**:
   con **Color del fondo: Original** se ve tal cual (azul); con un color elegido o **Arcoíris** se cambia solo el tono (HSV), así el
   fondo toma el color y la ola sigue blanca. El video solo se reproduce mientras ese fondo se ve. Si no se puede leer, se usa la ola
   dibujada por el shader (láminas translúcidas, como antes).
@@ -110,9 +112,12 @@ La ayuda de arriba dibuja cada botón: **círculo** para los de cara (✕ ○ �
   Nintendo y genéricos en oscuro; las teclas en claro.
 
 ## Portada en HD (tecla P / LT · L2 · ZL)
-Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 3 imágenes
-que superan 1280x720**, con su resolución y de dónde salen. Solo busca para ese juego.
-- **Aceptar / Enter / clic**: aplica la marcada · **1, 2, 3**: esa opción directo · **Atrás / Esc / clic derecho / clic fuera**: cierra.
+Sobre el juego seleccionado abre una **ventana mediana con bordes redondeados** (el launcher se ve detrás) con **hasta 9 imágenes
+horizontales (tipo banner / fondo) que superan 1280x720**, en una cuadrícula de 3x3, con su resolución y de dónde salen. Solo busca para ese juego.
+- **Flechas / cruceta**: izquierda-derecha de a una, arriba-abajo de a una fila · **Aceptar / Enter / clic**: aplica la marcada ·
+  **1 a 9**: esa opción directo · **Atrás / Esc / clic derecho / clic fuera**: cierra.
+- Orden de las fuentes: arte principal de Steam (3840x1240), banners de SteamGridDB (con clave), hasta 12 capturas de Steam (1920x1080),
+  imágenes horizontales grandes de la carpeta del juego y el fondo de la tienda de Steam. Se descargan de a 4 (≈1 s por juego).
 - Si no hay ninguna, aceptar abre el explorador de portadas (**buscar en mi PC**).
 - Fuentes: arte principal de Steam en grande (3840x1240), SteamGridDB (si hay clave en Ajustes), capturas de Steam (1920x1080)
   e **imágenes grandes de la propia carpeta del juego** (primero las que se llaman cover, portada, poster, banner…).
