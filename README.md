@@ -47,7 +47,8 @@ La tecla **L** (o R1/RB en el mando) va rotando entre los cuatro, y también se 
 - **Steam** (como el modo Big Picture): título "Jugados recientemente", fila con la **primera tarjeta ancha** (el último jugado; en juegos de
   Steam su banner `library_hero`) y el resto verticales, **siempre igual**. La elegida crece apenas (3,5 %) con un marco claro y su nombre
   y "Jugado hace…" debajo; la fila se desplaza sola **solo** cuando la elegida se iría de la pantalla (dejando ver la siguiente). El fondo
-  pasa a la portada del juego elegido en 0,25 s. Abajo, fila de **Recientes** en tarjetas apaisadas (clic = jugar). Al entrar, las
+  pasa al **banner** del juego elegido en 0,25 s. Abajo, el botón **Recientes** (centrado, como en Steam) y los últimos jugados en tarjetas
+  apaisadas: **abajo** pasa el foco a Recientes (la píldora se ilumina), izquierda/derecha entre ellos, aceptar = jugar, **arriba** vuelve. Al entrar, las
   tarjetas llegan escalonadas desde la derecha y lo de abajo sube; al salir se van a la izquierda.
 - **PS3 (XMB)**: fondo morado con las cintas de seda; categorías en horizontal (**Juegos**, **Recientes**, **Herramientas** con Añadir y Buscar juegos,
   y **Ajustes**) y la lista de la categoría elegida en vertical. **Izquierda/derecha** cambia de categoría y **arriba/abajo** de elemento (también con la
@@ -139,6 +140,9 @@ y de dónde salen. Una portada actual por debajo de 600x900 cuenta como "baja". 
 - **Flechas / cruceta**: izquierda-derecha de a una, arriba-abajo de a una fila (la cuadrícula se desplaza sola) · **Aceptar / Enter / clic**:
   aplica la marcada · **C / X·□ del mando / "buscar en mi PC"**: abre el explorador de portadas (el de la tecla C) para elegir una imagen
   propia · **Atrás / Esc / clic derecho / clic fuera**: cierra.
+- Dos pestañas: **Portada** (la de la baldosa) y **Banner del fondo** (imagen horizontal de 1280 o más de ancho: la usa el diseño Steam en la
+  tarjeta ancha, el fondo y Recientes; **no cambia la portada**). Se cambia con **Tab / Q·E**, **L1·R1** del mando o con un clic. Sin banner
+  propio se usa el `library_hero` de Steam. Se guarda en la carpeta covers/banner.
 - Fuentes, en orden: portada vertical de Steam (600x900), arte principal de Steam (3840x1240), portadas y banners de **SteamGridDB**
   (con clave en Ajustes: es donde hay decenas de opciones por juego, también de juegos que no están en Steam), todas las capturas de
   Steam (1920x1080) e **imágenes grandes de la propia carpeta del juego** (primero las que se llaman cover, portada, poster, banner…).

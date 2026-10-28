@@ -238,7 +238,8 @@ function listGames() {
     if (g.exe) keys.push('e:' + norm(g.exe));
     if (keys.some(k => seen.has(k))) continue;   // mismo nombre o mismo .exe = duplicado
     keys.forEach(k => seen.add(k));
-    out.push({ ...g, last: cfg.recent[g.id] || 0 });
+    const bf = bannerFile(g.id);
+    out.push({ ...g, last: cfg.recent[g.id] || 0, banner: fs.existsSync(bf) ? coverUrl(bf) : null });
   }
   return out.sort((a, b) => b.last - a.last || a.name.localeCompare(b.name));
 }
@@ -458,6 +459,8 @@ const HD_W = 600, HD_H = 900;
 const isHD = s => !!s && s.width >= HD_W && s.height >= HD_H;
 const hdDir = () => path.join(coversDir(), 'hd');
 const hdFile = id => path.join(hdDir(), safe(id) + '.jpg');
+// Banner propio del juego (imagen ancha): solo lo usa el diseño Steam (tarjeta ancha, fondo y recientes); no toca la portada de la baldosa
+const bannerFile = id => path.join(coversDir(), 'banner', safe(id) + '.jpg');
 const imgSize = buf => { try { const i = nativeImage.createFromBuffer(buf); return i.isEmpty() ? null : i.getSize(); } catch { return null; } };
 // Reduce a como mucho W x H (sin agrandar) y lo guarda como JPEG
 function fitJpeg(buf, W, H, q = 90) {
@@ -525,13 +528,16 @@ async function probeSize(url) {
 // Ajustes; es donde más opciones hay), todas las capturas de Steam (1920x1080) e imágenes grandes de la carpeta del juego.
 // Se muestra una miniatura de cada una; el tamaño real se lee de la cabecera y la imagen entera se baja solo al elegirla.
 const HD_MAX = 50;
-async function hdCandidates(g, max = HD_MAX) {      // max: las portadas automáticas piden pocas
+// wide = true: banners (imágenes horizontales de 1280 o más de ancho, para la tarjeta ancha y el fondo del diseño Steam)
+const isBanner = s => !!s && s.width >= 1280 && s.width >= s.height * 1.3;
+async function hdCandidates(g, max = HD_MAX, wide = false) {      // max: las portadas automáticas piden pocas
+  const ok = wide ? isBanner : isHD;
   const list = [];                                            // { url | file, preview, src, w?, h? }
   const appid = await steamAppFor(g).catch(() => null);
   if (appid) {
     const b = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/`;
     // ojo: en el CDN de Steam "library_600x900.jpg" mide 300x450; la de 600x900 es la "_2x"
-    list.push({ url: b + 'library_600x900_2x.jpg', preview: b + 'library_600x900.jpg', src: 'Portada de Steam' });
+    if (!wide) list.push({ url: b + 'library_600x900_2x.jpg', preview: b + 'library_600x900.jpg', src: 'Portada de Steam' });
     list.push({ url: b + 'library_hero_2x.jpg', preview: b + 'library_hero.jpg', src: 'Arte de Steam' });
   }
   if (sgdbKey()) {
@@ -541,8 +547,8 @@ async function hdCandidates(g, max = HD_MAX) {      // max: las portadas automá
       if (appid) { try { gid = (await (await fetch(`https://www.steamgriddb.com/api/v2/games/steam/${appid}`, { headers: h, signal: AbortSignal.timeout(8000) })).json())?.data?.id; } catch {} }
       if (!gid) gid = (await get('search/autocomplete/' + encodeURIComponent((await gameNames(g))[0] || g.name)))[0]?.id;
       if (gid) {
-        for (const x of await get(`grids/game/${gid}`)) if (isHD(x)) list.push({ url: x.url, preview: x.thumb || x.url, src: 'SteamGridDB', w: x.width, h: x.height });
-        for (const x of await get(`heroes/game/${gid}`)) if (isHD(x)) list.push({ url: x.url, preview: x.thumb || x.url, src: 'SteamGridDB (banner)', w: x.width, h: x.height });
+        if (!wide) for (const x of await get(`grids/game/${gid}`)) if (isHD(x)) list.push({ url: x.url, preview: x.thumb || x.url, src: 'SteamGridDB', w: x.width, h: x.height });
+        for (const x of await get(`heroes/game/${gid}`)) if (ok(x)) list.push({ url: x.url, preview: x.thumb || x.url, src: 'SteamGridDB (banner)', w: x.width, h: x.height });
       }
     } catch {}
   }
@@ -562,11 +568,11 @@ async function hdCandidates(g, max = HD_MAX) {      // max: las portadas automá
       try {
         if (c.file) {
           const buf = await fs.promises.readFile(c.file), s = imgSize(buf);
-          if (!isHD(s)) return null;
+          if (!ok(s)) return null;
           return { ...c, w: s.width, h: s.height, preview: 'data:image/jpeg;base64,' + fitJpeg(buf, 480, 480, 80).toString('base64') };
         }
         const s = c.w && c.h ? { width: c.w, height: c.h } : await probeSize(c.url);
-        return isHD(s) ? { ...c, w: s.width, h: s.height } : null;
+        return ok(s) ? { ...c, w: s.width, h: s.height } : null;
       } catch { return null; }
     }));
     for (const c of got) if (c && out.length < max) out.push(c);
@@ -580,13 +586,17 @@ function hdInfo(id) {
   const g = listGames().find(x => x.id === id);
   if (!g) return null;
   const s = coverRes(id);
-  return { id, name: g.name, res: s ? s.width + 'x' + s.height : 'sin portada', hd: isHD(s), key: !!sgdbKey() };
+  let b = null; try { b = imgSize(fs.readFileSync(bannerFile(id))); } catch {}
+  return { id, name: g.name, res: s ? s.width + 'x' + s.height : 'sin portada', hd: isHD(s), key: !!sgdbKey(),
+    bres: b ? b.width + 'x' + b.height : 'sin banner propio', bhd: isBanner(b) };
 }
-async function hdOptions(id) {
+// kind: 'cover' (portada de la baldosa) o 'banner' (imagen ancha del fondo)
+async function hdOptions(id, kind = 'cover') {
   const g = listGames().find(x => x.id === id);
   if (!g) return [];
-  if (!hdCands.has(id)) hdCands.set(id, hdCandidates(g));                       // la promesa se guarda: pedirla dos veces no busca dos veces
-  const list = await hdCands.get(id);
+  const k = kind + ':' + id;
+  if (!hdCands.has(k)) hdCands.set(k, hdCandidates(g, HD_MAX, kind === 'banner'));   // la promesa se guarda: pedirla dos veces no busca dos veces
+  const list = await hdCands.get(k);
   return list.map((c, i) => ({ i, w: c.w, h: c.h, src: c.src, preview: c.preview }));
 }
 // Guarda una portada elegida por el usuario. Si es HD se guarda el original en covers\hd\ y la baldosa usa una copia de hasta 1000x1500;
@@ -638,12 +648,18 @@ async function autoCovers() {
 }
 
 // La imagen entera se baja recién al elegirla, y se vuelve a comprobar que llegue a 600x900
-async function hdApply(id, i) {
-  const c = (await hdCands.get(id))?.[i];
+async function hdApply(id, i, kind = 'cover') {
+  const c = (await hdCands.get(kind + ':' + id))?.[i];
   if (!c) return null;
   try {
     const buf = c.file ? await fs.promises.readFile(c.file) : await download(c.url);
     const s = imgSize(buf);
+    if (kind === 'banner') {
+      if (!isBanner(s)) { note(s ? `Esa imagen resultó de ${s.width}x${s.height}: el banner necesita una horizontal de 1280 o más de ancho` : 'No se pudo leer esa imagen: elegí otra'); return null; }
+      fs.mkdirSync(path.dirname(bannerFile(id)), { recursive: true });
+      fs.writeFileSync(bannerFile(id), fitJpeg(buf, 2560, 1440, 90));
+      return coverUrl(bannerFile(id));
+    }
     if (!isHD(s)) { note(s ? `Esa imagen resultó de ${s.width}x${s.height}, menos que 600x900: elegí otra` : 'No se pudo leer esa imagen: elegí otra'); return null; }
     saveCover(id, buf);
     (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();
@@ -1177,8 +1193,8 @@ ipcMain.handle('setCover', async (e, id) => {
   return fileUrl(coverFile(id)) + '?t=' + Date.now();
 });
 ipcMain.handle('hdInfo', (e, id) => hdInfo(id));
-ipcMain.handle('hdOptions', (e, id) => hdOptions(id));
-ipcMain.handle('hdApply', (e, id, i) => hdApply(id, i));
+ipcMain.handle('hdOptions', (e, id, kind) => hdOptions(id, kind));
+ipcMain.handle('hdApply', (e, id, i, kind) => hdApply(id, i, kind));
 ipcMain.handle('hdDone', () => { hdCands.clear(); });             // libera las imágenes descargadas
 
 // ---------- Explorador de portadas propio (pantalla completa, cuadros grandes, mando) ----------

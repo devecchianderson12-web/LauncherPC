@@ -117,7 +117,12 @@
   #st-sub { font: 600 calc(var(--u) * 17) "Segoe UI", sans-serif; letter-spacing: .06em; opacity: .65; margin-top: calc(var(--u) * 6); text-transform: uppercase; }
   #st-tabs { position: absolute; left: 0; right: 0; top: calc(var(--u) * 630); display: flex; justify-content: center; gap: calc(var(--u) * 30); font: 600 calc(var(--u) * 18) "Segoe UI", sans-serif; letter-spacing: .05em; }
   #st-tabs span { padding: calc(var(--u) * 10) calc(var(--u) * 24); border-radius: calc(var(--u) * 30); }
-  #st-tabs span.on { background: rgba(255,255,255,.14); }
+  #st-tabs span.on { background: rgba(255,255,255,.14); cursor: pointer; transition: background .15s, color .15s; }
+  #steam.rz #st-tabs span.on { background: rgba(235,238,245,.95); color: #0e141b; }        /* foco en Recientes: la píldora se ilumina como en Steam */
+  #steam.rz .sc.sel { box-shadow: none; }
+  #steam.rz .sc.sel .pad { opacity: 0; }
+  .sr .si { transition: transform .2s cubic-bezier(.22,.8,.24,1), box-shadow .2s; transform-origin: 50% 50%; }
+  .sr.f .si { transform: scale(1.035); box-shadow: 0 0 0 calc(var(--u) * 3) rgba(220,225,235,.8), 0 calc(var(--u) * 14) calc(var(--u) * 40) rgba(0,0,0,.55); }
   #st-rec { position: absolute; left: calc(var(--u) * 56); right: 0; top: calc(var(--u) * 712); display: flex; gap: calc(var(--u) * 16); overflow: hidden; }
   .sr { flex: none; width: calc(var(--u) * 430); cursor: pointer; }
   .sr .si { height: calc(var(--u) * 240); border-radius: calc(var(--u) * 6); overflow: hidden; background: linear-gradient(160deg, #2a475e, #1b2838); position: relative; }
@@ -259,6 +264,11 @@
   #hd-msg small { display: block; font-size: .7em; opacity: .75; margin-top: calc(var(--u) * 14); }
   #hd-title { font-size: calc(var(--u) * 34); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hd-sub { font-size: calc(var(--u) * 22); opacity: .65; margin-top: calc(var(--u) * 6); }
+  #hd-tabs { display: flex; gap: calc(var(--u) * 14); margin-top: calc(var(--u) * 18); align-items: center; font-size: calc(var(--u) * 21); }
+  #hd-tabs span[data-k] { padding: calc(var(--u) * 8) calc(var(--u) * 26); border-radius: calc(var(--u) * 30); background: rgba(255,255,255,.08); cursor: pointer; transition: background .15s, color .15s; }
+  #hd-tabs span[data-k].on { background: rgba(255,255,255,.92); color: #0c1e5c; }
+  #hd-tabs .bk { opacity: .8; }
+  #hd-cards.wide { grid-template-columns: repeat(3, 1fr); grid-auto-rows: calc(var(--u) * 230); }
   #hd-cards { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: calc(var(--u) * 210); gap: calc(var(--u) * 18) calc(var(--u) * 20); align-content: start; padding: calc(var(--u) * 8); }
   #hd-cards::-webkit-scrollbar { display: none; }
   .hd-c { display: flex; flex-direction: column; gap: calc(var(--u) * 6); min-height: 0; cursor: pointer; transition: transform .15s ease-out; }
@@ -311,7 +321,8 @@
   <div id="pk-foot"></div>
 </div>
 <div id="hdpick"><div class="hd-box">
-  <div><div id="hd-title"></div><div id="hd-sub"></div></div>
+  <div><div id="hd-title"></div><div id="hd-sub"></div>
+    <div id="hd-tabs"><span id="hd-tl"></span><span data-k="cover">Portada</span><span data-k="banner">Banner del fondo</span><span id="hd-tr"></span></div></div>
   <div id="hd-cards"></div>
   <div id="hd-foot"></div>
 </div></div>
@@ -881,7 +892,7 @@ function xmbMove(dx, dy) {
   }
 }
 // Flechas y cruceta: en PS3 mueven en las dos direcciones; en los demás diseños solo izquierda/derecha
-function step(dx, dy) { if (layout === 'ps3') xmbMove(dx, dy); else if (dx) go(sel + dx); }
+function step(dx, dy) { if (layout === 'ps3') xmbMove(dx, dy); else if (layout === 'steam') stStep(dx, dy); else if (dx) go(sel + dx); }
 const nextLayout = () => ({ ps4: 'center', center: 'ps3', ps3: 'steam', steam: 'ps4' }[layout] || 'ps4');
 let wheelAt = 0;
 addEventListener('wheel', e => {
@@ -894,6 +905,7 @@ function go(i) {
   const n = Math.max(0, Math.min(items.length - 1, i));
   if (layout === 'ps3') { if (items[n]) { moved = true; xmbSelect(items[n]); } return; }
   if (n === sel) return;
+  if (layout === 'steam' && stZone === 'rec') { stZone = 'row'; stZoneMark(); }
   moved = true; sel = n; place(); updateInfo(); armArt();
 }
 
@@ -956,10 +968,11 @@ async function load(force) {
 // de la pantalla, dejando a la vista parte de la tarjeta siguiente. Todo con transform: un transform para la fila, uno por tarjeta.
 const ST = { top: 140, h: 360, ww: 770, pw: 240, gap: 16, ax: 52, peek: 150 };   // unidades de 1920x1080
 const PAD_ICON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.6 2.6 0 0 1-4.4 1.3L14.6 15.5H9.4L7.7 17.6a2.6 2.6 0 0 1-4.4-1.3l-.7-3.4A4.5 4.5 0 0 1 7 7.5z"/></svg>';
-let stEls = [], stOff = 0;
+let stEls = [], stOff = 0, stZone = 'row', stRecs = [], stRi = 0;   // stZone: 'row' (fila de arriba) o 'rec' (Recientes, abajo)
 const stX = i => i === 0 ? 0 : ST.ww + ST.gap + (i - 1) * (ST.pw + ST.gap);   // posición dentro de la fila
 const stW = i => i === 0 ? ST.ww : ST.pw;
-const heroUrl = it => it.type === 'steam' && it.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${it.appid}/library_hero.jpg` : null;
+// Banner: el elegido con P (pestaña "Banner del fondo") o, si no hay, el library_hero de Steam
+const heroUrl = it => it.banner || (it.type === 'steam' && it.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${it.appid}/library_hero.jpg` : null);
 const ago = t => {
   const m = (Date.now() - t) / 60000;
   if (m < 60) return 'hace ' + Math.max(1, Math.round(m)) + ' min';
@@ -993,7 +1006,7 @@ function stBuild() {
   const frag = document.createDocumentFragment();
   items.forEach((it, i) => { const c = stCard(it, i); frag.appendChild(c); stEls.push(c); });
   row.appendChild(frag);
-  stOff = 0; stRecent(); stPlace(true);
+  stOff = 0; stZone = 'row'; stRecent(); stPlace(true);
 }
 function stCovers(id) { stEls.forEach(c => { if (c._it.id === id && !c.classList.contains('sp')) stCover(c, c._it); }); if (layout === 'steam') stRecent(); }
 function stPlace(instant) {
@@ -1021,10 +1034,13 @@ function stPlace(instant) {
 // Fila de abajo: los últimos juegos jugados en tarjetas apaisadas (banner si es de Steam, si no la portada)
 function stRecent() {
   const box = $('#st-rec'); box.textContent = '';
-  const list = items.filter(g => g.last).sort((a, b) => b.last - a.last).slice(0, 5);
+  const list = stRecs = items.filter(g => g.last).sort((a, b) => b.last - a.last).slice(0, 5);
   $('#st-tabs').style.visibility = list.length ? 'visible' : 'hidden';
-  list.forEach(g => {
+  if (!list.length && stZone === 'rec') stZone = 'row';
+  stRi = Math.min(stRi, Math.max(0, list.length - 1));
+  list.forEach((g, i) => {
     const r = document.createElement('div'); r.className = 'sr';
+    r.onmousemove = () => { if (stZone === 'rec' && stRi !== i) { stRi = i; stZoneMark(); } };
     const si = document.createElement('div'); si.className = 'si';
     const src = heroUrl(g) || covers[g.id];
     if (src) { const im = new Image(); im.draggable = false; im.decoding = 'async'; im.src = src; if (heroUrl(g)) im.onerror = () => { if (covers[g.id]) im.src = covers[g.id]; }; si.appendChild(im); }
@@ -1033,7 +1049,27 @@ function stRecent() {
     r.append(si, sl, sn); r.onclick = () => launchGame(g);
     box.appendChild(r);
   });
+  stZoneMark();
 }
+// Abajo desde la fila entra en Recientes (como en Steam): izquierda/derecha entre los recientes, aceptar = jugar, arriba = volver
+function stZoneMark() {
+  $('#steam').classList.toggle('rz', stZone === 'rec');
+  [...$('#st-rec').children].forEach((r, i) => r.classList.toggle('f', stZone === 'rec' && i === stRi));
+}
+function stStep(dx, dy) {
+  if (dy > 0 && stZone === 'row' && stRecs.length) { stZone = 'rec'; stZoneMark(); stRecArt(); return; }
+  if (dy < 0 && stZone === 'rec') { stZone = 'row'; stZoneMark(); armArt(); return; }
+  if (!dx) return;
+  if (stZone === 'row') { go(sel + dx); return; }
+  const n = Math.max(0, Math.min(stRecs.length - 1, stRi + dx));
+  if (n !== stRi) { stRi = n; stZoneMark(); stRecArt(); }
+}
+function stRecArt() {                                      // con el foco en Recientes, el fondo muestra el banner de ese juego
+  hideArt();
+  const g = stRecs[stRi]; if (!g) return;
+  artT = setTimeout(() => showArt(g, false, true), 250);
+}
+$('#st-tabs').addEventListener('click', () => { if (stRecs.length) { stZone = stZone === 'rec' ? 'row' : 'rec'; stZoneMark(); if (stZone === 'rec') stRecArt(); else armArt(); } });
 
 // ---------- Info y recientes ----------
 let titleAnim = null;
@@ -1096,15 +1132,19 @@ function hideArt() {
 function armArt() {
   hideArt();
   const it = items[sel];
-  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !covers[it.id] || launching || settingsOpen() || pickerOpen() || hdOpen()) return;
+  if (layout === 'steam' && stZone === 'rec') return;
+  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !(covers[it.id] || (layout === 'steam' && heroUrl(it))) || launching || settingsOpen() || pickerOpen() || hdOpen()) return;
   artT = setTimeout(() => showArt(it), layout === 'steam' ? 250 : 1000);   // en Steam el fondo cambia casi enseguida, como el original
 }
 // preview = true: se dibuja aunque Ajustes esté abierto (para ver el difuminado mientras mueves la barra)
-function showArt(it, preview = false) {
-  const url = covers[it.id];
-  const ok = () => items[sel] === it && !launching && (preview || !settingsOpen());
+// rec = true: juego de la fila Recientes del diseño Steam (no es items[sel])
+function showArt(it, preview = false, rec = false) {
+  const wide = layout === 'steam' && heroUrl(it);                  // en Steam el fondo es el banner ancho del juego
+  const url = wide || covers[it.id];
+  const ok = () => (rec ? layout === 'steam' && stZone === 'rec' && stRecs[stRi] === it : items[sel] === it) && !launching && (preview || !settingsOpen()) && !hdOpen();
   if (!url || !ok()) return;
   const img = new Image();
+  img.onerror = () => { if (wide && covers[it.id] && img.src !== covers[it.id]) img.src = covers[it.id]; };   // sin banner de Steam: la portada
   img.onload = () => {
     if (!ok()) return;
     const W = artEl.width, H = artEl.height, cr = W / H, ir = img.width / img.height;
@@ -1139,6 +1179,7 @@ async function rescan() {
 async function activate() {
   if (launching) return;
   if (layout === 'ps3' && xcats[xcat] && xcats[xcat].rows[xrow] && xcats[xcat].rows[xrow].type === 'scan') { rescan(); return; }
+  if (layout === 'steam' && stZone === 'rec') { const g = stRecs[stRi]; if (g) launchGame(g); return; }
   const it = items[sel]; if (!it) return;
   if (it.type === 'add') {
     const r = await window.api.add();
@@ -1288,22 +1329,34 @@ function pkHint() {
 const hdEl = $('#hdpick'), hdCards = $('#hd-cards');
 const hdOpen = () => hdEl.classList.contains('open');
 let hd = null;
-async function upgradeCovers() {
+// Dos pestañas: "Portada" (la de la baldosa) y "Banner del fondo" (imagen ancha que usa el diseño Steam en la tarjeta ancha,
+// el fondo y Recientes; no cambia la portada). Se cambia con Tab / Q·E en el teclado, L1·R1 en el mando o con un clic.
+async function upgradeCovers(kind = 'cover') {
   const it = items[sel];
   if (hd || pickerOpen() || !it || it.type === 'add' || it.type === 'cfg') return;
   const info = await window.api.hdInfo(it.id);
   if (!info) return;
-  hd = { it, info, opts: [], f: 0, seq: 1, busy: false, none: false };
+  hd = { it, info, kind, opts: [], f: 0, seq: 0, busy: false, none: false };
   $('#hd-title').textContent = it.name;
-  $('#hd-sub').textContent = `Portada actual: ${info.res}` + (info.hd ? ' · ya está en HD, podés cambiarla igual' : '');
-  hdCards.innerHTML = '<div id="hd-msg">Buscando portadas de 600x900 o más…</div>';
-  hideArt(); hdEl.classList.add('open'); hdHint();
-  const seq = hd.seq, opts = await window.api.hdOptions(it.id);
+  hideArt(); hdEl.classList.add('open');
+  hdLoad();
+}
+const hdCols = () => hd && hd.kind === 'banner' ? 3 : 5;
+async function hdLoad() {
+  const { it, info, kind } = hd, wide = kind === 'banner', seq = ++hd.seq;
+  hd.opts = []; hd.f = 0; hd.none = false; hd.busy = false;
+  document.querySelectorAll('#hd-tabs [data-k]').forEach(s => s.classList.toggle('on', s.dataset.k === kind));
+  $('#hd-sub').textContent = wide ? `Banner actual: ${info.bres}` + (info.bhd ? '' : ' · se usa el de Steam si existe') + ' · solo cambia el fondo, no la portada'
+    : `Portada actual: ${info.res}` + (info.hd ? ' · ya está en HD, podés cambiarla igual' : '');
+  hdCards.classList.toggle('wide', wide);
+  hdCards.innerHTML = `<div id="hd-msg">${wide ? 'Buscando banners horizontales de 1280 o más de ancho…' : 'Buscando portadas de 600x900 o más…'}</div>`;
+  hdHint();
+  const opts = await window.api.hdOptions(it.id, kind);
   if (!hd || hd.seq !== seq) return;
   hd.opts = opts.filter(o => o.preview);
   if (!hd.opts.length) {
     hd.none = true; hdHint();
-    hdCards.innerHTML = '<div id="hd-msg">No encontré portadas de 600x900 o más para este juego.' +
+    hdCards.innerHTML = '<div id="hd-msg">' + (wide ? 'No encontré banners horizontales para este juego.' : 'No encontré portadas de 600x900 o más para este juego.') +
       (info.key ? '' : '<small>Con una clave gratis de SteamGridDB (Ajustes) se buscan también juegos que no están en Steam.</small>') + '</div>';
     return;
   }
@@ -1318,19 +1371,30 @@ async function upgradeCovers() {
   });
   hdMark();
 }
+function hdTab(d) {                                        // d = -1 / 1 (o el nombre de la pestaña)
+  if (!hd) return;
+  const k = typeof d === 'string' ? d : hd.kind === 'cover' ? 'banner' : 'cover';
+  if (k !== hd.kind) { hd.kind = k; hdLoad(); }
+}
+$('#hd-tabs').addEventListener('click', e => { const k = e.target.closest('[data-k]')?.dataset.k; if (k) hdTab(k); });
 function hdMark() { [...hdCards.children].forEach((c, i) => c.classList.toggle('f', i === hd.f)); hdCards.children[hd.f]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-// Cuadrícula de 5 columnas con scroll: izquierda/derecha de a uno, arriba/abajo de a una fila (5)
-function hdMove(d) { if (hd && hd.opts.length) { const n = hd.f + d; if (n >= 0 && n < hd.opts.length) { hd.f = n; hdMark(); } } }
+// Cuadrícula con scroll (5 columnas las portadas, 3 los banners): izquierda/derecha de a uno, arriba/abajo de a una fila
+function hdMove(d) { if (hd && hd.opts.length) { if (Math.abs(d) > 1) d = Math.sign(d) * hdCols(); const n = hd.f + d; if (n >= 0 && n < hd.opts.length) { hd.f = n; hdMark(); } } }
 async function hdChoose() {
   if (!hd || hd.busy) return;
-  if (hd.none) { const it = hd.it; hdClose(); go(items.indexOf(it)); changeCover(); return; }   // sin resultados: aceptar = buscar en el PC
+  if (hd.none) { if (hd.kind === 'banner') { hdClose(); return; } const it = hd.it; hdClose(); go(items.indexOf(it)); changeCover(); return; }   // sin resultados: aceptar = buscar en el PC
   if (!hd.opts.length) return;
-  const it = hd.it, o = hd.opts[hd.f];
+  const it = hd.it, o = hd.opts[hd.f], kind = hd.kind;
   hd.busy = true;
-  const url = await window.api.hdApply(it.id, o.i);
+  const url = await window.api.hdApply(it.id, o.i, kind);
   if (!hd) return;
+  if (!url) { hd.busy = false; toast(kind === 'banner' ? 'No se pudo aplicar ese banner' : 'No se pudo aplicar esa portada'); return; }
   hdClose(true);
-  if (url) { setCoverUrl(it, url); toast('Portada en HD aplicada'); } else toast('No se pudo aplicar esa portada');
+  if (kind === 'banner') {
+    items.forEach(x => { if (x.id === it.id) x.banner = url; });
+    if (layout === 'steam') { const off = stOff; stBuild(); stOff = off; stPlace(true); }
+    toast('Banner del fondo aplicado');
+  } else { setCoverUrl(it, url); toast('Portada en HD aplicada'); }
 }
 function hdClose(quiet) {
   if (!hd) return;
@@ -1342,13 +1406,15 @@ function hdClose(quiet) {
 }
 function hdHint() {
   const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc', remove: 'C' };
-  const okTxt = hd && hd.none ? 'buscar en mi PC' : 'aplicar';
+  const ban = hd && hd.kind === 'banner', okTxt = hd && hd.none ? (ban ? 'cerrar' : 'buscar en mi PC') : 'aplicar';
+  const LS = gp ? labelsOf(gp) : null;
+  $('#hd-tl').innerHTML = gp ? glyph(LS.scan, k) : glyph('Tab', 'kb'); $('#hd-tr').innerHTML = gp ? glyph(LS.layout, k) : '';
   $('#hd-foot').innerHTML = `<span class="hk" data-a="ok">${glyph(L.ok, k)}${okTxt}</span>` +
-    (hd && hd.none ? '' : `<span class="hk" data-a="pc">${glyph(L.remove, k)}buscar en mi PC</span>`) +
+    (hd && (hd.none || ban) ? '' : `<span class="hk" data-a="pc">${glyph(L.remove, k)}buscar en mi PC</span>`) +
     `<span class="hk" data-a="end">${glyph(L.back, k)}cerrar</span>` + (hd && hd.none ? '' : '<span class="hk">flechas: elegir</span>');
 }
 // Acceso al explorador de portadas (el de la tecla C) para elegir una imagen propia
-function hdPc() { if (!hd) return; const it = hd.it; hdClose(); go(items.indexOf(it)); changeCover(); }
+function hdPc() { if (!hd || hd.kind === 'banner') return; const it = hd.it; hdClose(); go(items.indexOf(it)); changeCover(); }
 $('#hd-foot').addEventListener('click', e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'ok') hdChoose(); else if (a === 'pc') hdPc(); else if (a === 'end') hdClose(); });
 hdEl.addEventListener('click', e => { if (e.target === hdEl) hdClose(); });            // clic fuera de la ventana = cerrar
 hdEl.addEventListener('contextmenu', e => { e.preventDefault(); hdClose(); });
@@ -1724,6 +1790,7 @@ addEventListener('keydown', e => {
     else if (k === 'Enter') hdChoose();
     else if (k === 'Backspace') hdClose();
     else if (k.toLowerCase() === 'c') hdPc();
+    else if (k === 'Tab' || k.toLowerCase() === 'q' || k.toLowerCase() === 'e') hdTab(k.toLowerCase() === 'q' ? -1 : 1);
     else if (k === 'Escape') hdClose();
     e.preventDefault();
     return;
@@ -1882,6 +1949,7 @@ function poll() {
   const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
   if (hdOpen()) {
     edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose); edge('remove', on('remove'), hdPc);
+    edge('scan', on('scan'), sh(() => hdTab(-1))); edge('layout', on('layout'), sh(() => hdTab(1)));     // L1 / R1: pestaña Portada / Banner
     repH(on('right') ? 1 : on('left') ? -1 : 0, now, hdMove);
     repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => hdMove(d * 5));
     return;
