@@ -72,7 +72,7 @@ let win, tray, cfg;
 const userDir = () => app.getPath('userData');
 const coversDir = () => path.join(userDir(), 'covers');
 const cfgFile = () => path.join(userDir(), 'config.json');
-const DEFAULTS = { custom: [], apiKey: '', hotkey: 'Control+Alt+P', layout: 'ps4', recent: {}, bg: true, autostart: false, minimized: false, hideTaskbar: true, padMaps: {}, gpuMode: 'auto', tune: { done: false, tried: {} } };
+const DEFAULTS = { custom: [], apiKey: '', hotkey: 'Control+Alt+P', layout: 'ps4', recent: {}, bg: true, autostart: false, minimized: false, hideTaskbar: true, gpuMode: 'auto', tune: { done: false, tried: {} } };
 
 function loadCfg() {
   try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; }
@@ -742,13 +742,27 @@ function createWin() {
   win.loadFile('index.html');
   win.on('close', e => { if (!app.isQuitting) { e.preventDefault(); hideLauncher(); } });
 }
+// Foco real para la ventana y la página (sin foco, el mando no llega a la interfaz). Si Windows no lo da, lo fuerza el ayudante;
+// se repite a los 300 ms porque la ventana a pantalla completa tarda un poco en aparecer.
+function toFront() {
+  if (!win || win.isDestroyed()) return;
+  const go = () => {
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    win.focus(); win.webContents.focus();
+    if (process.platform === 'win32') {                // si ya está delante, el ayudante no hace nada
+      const b = win.getNativeWindowHandle();
+      shellSend('FG ' + (b.length >= 8 ? b.readBigUInt64LE(0) : b.readUInt32LE(0)).toString());
+    }
+  };
+  go(); setTimeout(go, 300);
+}
 // Al ocultar se espera ~190 ms para que la interfaz haga su animación de salida antes de esconder la ventana
 let hideT = null;
 function showLauncher() {
   if (!win) return;
   clearTimeout(hideT); hideT = null;
   if (paused) { resumeLauncher(true); return; }     // ya estaba visible detrás de otro programa: solo estaba congelado
-  win.show(); win.focus();
+  win.show(); toFront();
   win.webContents.send('enter');
   startStats();
   syncTaskbar();
@@ -794,6 +808,29 @@ public static class SH {
   [DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string t);
   [DllImport(\"user32.dll\")] static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport(\"user32.dll\")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport(\"user32.dll\")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport(\"user32.dll\")] static extern bool BringWindowToTop(IntPtr h);
+  [DllImport(\"user32.dll\")] static extern bool AttachThreadInput(uint a, uint b, bool on);
+  [DllImport(\"kernel32.dll\")] static extern uint GetCurrentThreadId();
+  [DllImport(\"user32.dll\")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+
+  // ----- Llevar el launcher al frente de verdad -----
+  // Windows no deja tomar el foco a un programa que no recibio la ultima entrada del usuario (al arrancar, o al abrirlo con el mando):
+  // la ventana aparece pero sin foco, y sin foco Chromium no le pasa el mando a la pagina hasta que se hace clic o se toca el teclado.
+  static void Front(IntPtr h) {
+    try {
+      if (h == IntPtr.Zero || GetForegroundWindow() == h) return;
+      uint pid, fg = GetWindowThreadProcessId(GetForegroundWindow(), out pid), me = GetCurrentThreadId();
+      bool att = fg != 0 && fg != me && AttachThreadInput(me, fg, true);   // compartir la entrada con la ventana que tiene el foco
+      BringWindowToTop(h); SetForegroundWindow(h);
+      if (att) AttachThreadInput(me, fg, false);
+      if (GetForegroundWindow() != h) {                     // ultimo recurso: con Alt pulsado Windows permite cambiar el primer plano
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        SetForegroundWindow(h);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);              // se suelta despues, ya con el launcher delante
+      }
+    } catch {}
+  }
 
   // ----- Mando: L1+R1+L2+R2 a la vez = abrir/ocultar el launcher (tambien con un juego delante) -----
   // XInput (Xbox y compatibles) + winmm (PlayStation, Nintendo y mandos DirectInput: botones 5-8 = L1 R1 L2 R2).
@@ -926,6 +963,7 @@ public static class SH {
         l = l.Trim();
         if (l == \"TB 1\") { tb = true; Tb(false); StartBurst(); }
         else if (l == \"TB 0\") { tb = false; Tb(true); }
+        else if (l.StartsWith(\"FG \")) { long v; if (long.TryParse(l.Substring(3), out v)) Front(new IntPtr(v)); }
         else if (l == \"QUIT\") break;
       }
     } catch {}
@@ -1021,7 +1059,7 @@ function resumeLauncher(front) {
   clearTimeout(noneT); noneT = null;
   lowPrio(false);
   if (win && !win.isDestroyed()) {
-    if (front) { win.show(); win.focus(); }
+    if (front) { win.show(); toFront(); }
     win.webContents.send('resume');
   }
   startStats();
@@ -1308,7 +1346,7 @@ ipcMain.handle('useVideo', async () => {
   } catch (e) { return { error: 'No se pudo copiar el video (¿falta espacio?)' }; }
 });
 
-ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, padMaps: cfg.padMaps || {}, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgSharp: Number.isFinite(cfg.bgSharp) ? cfg.bgSharp : 100, bgBlur: Number.isFinite(cfg.bgBlur) ? cfg.bgBlur : 0, ps3Src: cfg.ps3Src || 'hd', bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', user: os.userInfo().username }));
+ipcMain.handle('getCfg', () => ({ apiKey: cfg.apiKey, layout: cfg.layout, bg: cfg.bg !== false, autostart: !!cfg.autostart, minimized: !!cfg.minimized, hideTaskbar: cfg.hideTaskbar !== false, version: app.getVersion(), updSkip: cfg.updSkip || '', bgMode: cfg.bgMode || 'default', bgColor: cfg.bgColor || '#6b4fa0', bgSpeed: Number.isFinite(cfg.bgSpeed) ? cfg.bgSpeed : 30, artBlur: Number.isFinite(cfg.artBlur) ? cfg.artBlur : 55, bgSharp: Number.isFinite(cfg.bgSharp) ? cfg.bgSharp : 100, bgBlur: Number.isFinite(cfg.bgBlur) ? cfg.bgBlur : 0, ps3Src: cfg.ps3Src || 'hd', bgType: cfg.bgType || 'classic', bgVideo: bgVideoUrl(), xmbVideo: xmbVideoUrl(), btnStyle: cfg.btnStyle || 'min', stZoom: cfg.stZoom || 'steam', user: os.userInfo().username }));
 ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.apiKey === 'string') cfg.apiKey = patch.apiKey.trim();
   if (['ps4', 'center', 'ps3', 'steam'].includes(patch.layout)) cfg.layout = patch.layout;
@@ -1316,13 +1354,13 @@ ipcMain.handle('setCfg', (e, patch) => {
   if (typeof patch.autostart === 'boolean') cfg.autostart = patch.autostart;
   if (typeof patch.minimized === 'boolean') cfg.minimized = patch.minimized;
   if (typeof patch.hideTaskbar === 'boolean') cfg.hideTaskbar = patch.hideTaskbar;
-  if (patch.padMaps && typeof patch.padMaps === 'object') cfg.padMaps = patch.padMaps;
   if (typeof patch.updSkip === 'string') cfg.updSkip = patch.updSkip.slice(0, 32);
   if (['default', 'color', 'rainbow'].includes(patch.bgMode)) cfg.bgMode = patch.bgMode;
   if (typeof patch.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(patch.bgColor)) cfg.bgColor = patch.bgColor;
   if (Number.isFinite(patch.bgSpeed)) cfg.bgSpeed = Math.max(1, Math.min(100, Math.round(patch.bgSpeed)));
   if (['classic', 'ps3', 'video'].includes(patch.bgType)) cfg.bgType = patch.bgType;
   if (patch.btnStyle === 'min' || patch.btnStyle === 'color') cfg.btnStyle = patch.btnStyle;
+  if (patch.stZoom === 'steam' || patch.stZoom === 'ps4') cfg.stZoom = patch.stZoom;
   if (Number.isFinite(patch.artBlur)) cfg.artBlur = Math.max(0, Math.min(100, Math.round(patch.artBlur)));
   if (patch.ps3Src === 'hd' || patch.ps3Src === 'video') cfg.ps3Src = patch.ps3Src;
   if (Number.isFinite(patch.bgBlur)) cfg.bgBlur = Math.max(0, Math.min(100, Math.round(patch.bgBlur)));

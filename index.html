@@ -118,6 +118,9 @@
   #st-tabs { position: absolute; left: 0; right: 0; top: calc(var(--u) * 630); display: flex; justify-content: center; gap: calc(var(--u) * 30); font: 600 calc(var(--u) * 18) "Segoe UI", sans-serif; letter-spacing: .05em; }
   #st-tabs span { padding: calc(var(--u) * 10) calc(var(--u) * 24); border-radius: calc(var(--u) * 30); }
   #st-tabs span.on { background: rgba(255,255,255,.14); cursor: pointer; transition: background .15s, color .15s; }
+  /* Opción "Tarjetas: PS4": la elegida se amplía como las baldosas de PS4 (crece hacia la derecha y abajo y corre a las siguientes) */
+  #steam.z4 .sc { transform-origin: 0 20%; transition: transform .3s cubic-bezier(.22,.8,.24,1), box-shadow .2s; }
+  #steam.z4 #st-info { transition-duration: .3s; }
   #steam.rz #st-tabs span.on { background: rgba(235,238,245,.95); color: #0e141b; }        /* foco en Recientes: la píldora se ilumina como en Steam */
   #steam.rz .sc.sel { box-shadow: none; }
   #steam.rz .sc.sel .pad { opacity: 0; }
@@ -282,11 +285,6 @@
   #hd-msg { grid-column: 1 / -1; align-self: center; text-align: center; font-size: calc(var(--u) * 30); opacity: .75; }
   #hd-foot { display: flex; gap: calc(var(--u) * 30); align-items: center; font-size: calc(var(--u) * 21); opacity: .85; flex-wrap: wrap; }
   #hd-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); cursor: pointer; }
-  #padwiz { position: fixed; inset: 0; background: rgba(2,8,42,.97); display: none; flex-direction: column; align-items: center; justify-content: center;
-    gap: 22px; z-index: 20; font-size: 30px; text-align: center; padding: 40px; }
-  #padwiz.open { display: flex; }
-  #padwiz small { font-size: 19px; opacity: .7; }
-  #padwiz b { font-weight: 600; }
 </style>
 </head>
 <body class="ps4 enter">
@@ -326,7 +324,6 @@
   <div id="hd-cards"></div>
   <div id="hd-foot"></div>
 </div></div>
-<div id="padwiz"><div id="pw-t"></div><small id="pw-s"></small><div class="btns"><button class="btn" id="pw-skip">Omitir</button><button class="btn" id="pw-cancel">Cancelar</button></div></div>
 <div id="upd"><b id="upd-t"></b><span id="upd-s">Se cerrará y se abrirá la versión nueva</span>
   <div class="btns"><button class="btn on" id="upd-go">Actualizar</button><button class="btn" id="upd-no">Ahora no</button></div>
   <div class="pb"><i></i></div></div>
@@ -338,6 +335,7 @@
   <div class="row"><span>Fondo</span><div class="btns"><button class="btn" id="b-bgvid">Subir video</button><button class="btn" id="b-bgcls">Fondo clásico</button><button class="btn" id="b-bgps3">Fondo original PS3</button></div></div>
   <div class="row"><span>Fondo PS3</span><div class="btns"><button class="btn" id="b-psh">Alta definición</button><button class="btn" id="b-psv">Video original</button></div></div>
   <div class="row"><span id="sharpinfo">Nitidez del fondo</span><button class="btn sm" id="b-shm">−</button><input type="range" id="sharp" min="25" max="100" step="5" value="100"><button class="btn sm" id="b-shp">+</button></div>
+  <div class="row"><span>Tarjetas en Steam</span><div class="btns"><button class="btn" id="b-stzs">Como Steam</button><button class="btn" id="b-stz4">Ampliar como PS4</button></div></div>
   <div class="row"><span>Botones de la ayuda</span><div class="btns"><button class="btn" id="b-btmin">Minimalista</button><button class="btn" id="b-btcol">Colores</button></div></div>
   <div class="row"><span>Fondo animado</span><div class="btns"><button class="btn" id="b-bgon">Sí</button><button class="btn" id="b-bgoff">No</button></div></div>
   <div class="row"><span>Color del fondo</span><div class="btns"><button class="btn" id="b-cdef">Original</button><button class="btn" id="b-ccol">Color</button><button class="btn" id="b-crb">Arcoíris</button></div></div>
@@ -346,8 +344,8 @@
   <div class="row"><span id="blurinfo">Difuminado del fondo</span><button class="btn sm" id="b-blm">−</button><input type="range" id="blur" min="0" max="100" step="5" value="0"><button class="btn sm" id="b-blp">+</button></div>
   <div class="row"><span>Iniciar con Windows</span><div class="btns"><button class="btn" id="b-aton">Sí</button><button class="btn" id="b-atoff">No</button></div></div>
   <div class="row" id="r-min"><span>Iniciar minimizado</span><div class="btns"><button class="btn" id="b-mnon">Sí</button><button class="btn" id="b-mnoff">No</button></div></div>
-  <div class="row"><span id="padinfo">Mando</span><div class="btns"><button class="btn" id="b-pad">Configurar botones</button><button class="btn" id="b-padreset">Restablecer</button></div></div>
-  <p style="margin-top:-6px">Xbox, PlayStation y Nintendo se detectan solos y la ayuda de abajo cambia según el mando. Con mandos raros usa Configurar botones. Dentro de Ajustes: cruceta para moverte, A/✕ pulsa, B/○ cierra.</p>
+  <div class="row"><span id="padinfo">Mando</span></div>
+  <p style="margin-top:-6px">Xbox, PlayStation y Nintendo se detectan solos y la ayuda de abajo cambia según el mando. Los mandos genéricos (DirectInput) usan el orden habitual □ ✕ ○ △. Dentro de Ajustes: cruceta para moverte, A/✕ pulsa, B/○ cierra.</p>
   <div class="row"><span>Ocultar barra de tareas</span><div class="btns"><button class="btn" id="b-tbon">Sí</button><button class="btn" id="b-tboff">No</button></div></div>
   <div class="row"><span id="updinfo">Versión</span><div class="btns"><button class="btn" id="b-updgo" style="display:none">Actualizar</button><button class="btn" id="b-updchk">Buscar actualizaciones</button></div></div>
   <div class="row"><span>Cerrar el launcher por completo</span><button class="btn" id="b-quit">Salir</button></div>
@@ -968,7 +966,8 @@ async function load(force) {
 // de la pantalla, dejando a la vista parte de la tarjeta siguiente. Todo con transform: un transform para la fila, uno por tarjeta.
 const ST = { top: 140, h: 360, ww: 770, pw: 240, gap: 16, ax: 52, peek: 150 };   // unidades de 1920x1080
 const PAD_ICON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.6 2.6 0 0 1-4.4 1.3L14.6 15.5H9.4L7.7 17.6a2.6 2.6 0 0 1-4.4-1.3l-.7-3.4A4.5 4.5 0 0 1 7 7.5z"/></svg>';
-let stEls = [], stOff = 0, stZone = 'row', stRecs = [], stRi = 0;   // stZone: 'row' (fila de arriba) o 'rec' (Recientes, abajo)
+const ST_Z4 = 1.12;                                                  // ampliación de la elegida con "Ampliar como PS4"
+let stZoom = 'steam', stEls = [], stOff = 0, stZone = 'row', stRecs = [], stRi = 0;   // stZone: 'row' (fila de arriba) o 'rec' (Recientes, abajo)
 const stX = i => i === 0 ? 0 : ST.ww + ST.gap + (i - 1) * (ST.pw + ST.gap);   // posición dentro de la fila
 const stW = i => i === 0 ? ST.ww : ST.pw;
 // Banner: el elegido con P (pestaña "Banner del fondo") o, si no hay, el library_hero de Steam
@@ -1013,20 +1012,21 @@ function stPlace(instant) {
   const row = $('#st-row'), info = $('#st-info');
   if (instant) { row.classList.add('inst'); info.classList.add('inst'); }
   // la fila se mueve solo si la elegida se iría de la pantalla (dejando ver un pedazo de la siguiente o la anterior)
-  const view = 1920 - 2 * ST.ax, x = stX(sel), w = stW(sel), last = stEls.length - 1;
+  const z = stZoom === 'ps4' ? ST_Z4 : 1, grow = stW(sel) * (z - 1);     // con PS4 la elegida ocupa más y las siguientes se corren
+  const view = 1920 - 2 * ST.ax, x = stX(sel), w = stW(sel) * z, last = stEls.length - 1;
   const minOff = x + w + (sel < last ? ST.peek : 0) - view, maxOff = x - (sel > 0 ? ST.peek : 0);
   stOff = Math.max(0, Math.min(Math.max(stOff, minOff), maxOff));
   row.style.transform = `translate3d(${((ST.ax - stOff) * u).toFixed(1)}px, ${(ST.top * u).toFixed(1)}px, 0)`;
   for (let i = 0; i < stEls.length; i++) {
-    const c = stEls[i], cx = stX(i);
+    const c = stEls[i], cx = stX(i) + (i > sel ? grow : 0);
     if (cx + stW(i) < stOff - 400 || cx > stOff + view + 400) { if (c._on !== false) { c._on = false; c.style.display = 'none'; } continue; }   // fuera de pantalla
     if (c._on !== true) { c._on = true; c.style.display = ''; }
     const wp = stW(i) * u + 'px'; if (c.style.width !== wp) c.style.width = wp;          // por si cambió el tamaño de la ventana
-    c.style.transform = `translate3d(${(cx * u).toFixed(1)}px, 0, 0)${i === sel ? ' scale(1.035)' : ''}`;
+    c.style.transform = `translate3d(${(cx * u).toFixed(1)}px, 0, 0)${i === sel ? ` scale(${z > 1 ? z : 1.035})` : ''}`;
     c.classList.toggle('sel', i === sel);
   }
   // nombre y última vez jugado, justo debajo de la elegida
-  info.style.transform = `translate3d(${((ST.ax + x - stOff) * u).toFixed(1)}px, ${((ST.top + ST.h + 26) * u).toFixed(1)}px, 0)`;
+  info.style.transform = `translate3d(${((ST.ax + x - stOff) * u).toFixed(1)}px, ${((ST.top + ST.h + (z > 1 ? ST.h * (z - 1) * .8 : 0) + 26) * u).toFixed(1)}px, 0)`;
   const it = items[sel];
   if (it) { $('#st-name').textContent = it.name; $('#st-sub').textContent = it.last ? '▶  Jugado ' + ago(it.last) : (SUB[it.type] || ''); }
   if (instant) { void row.offsetWidth; row.classList.remove('inst'); info.classList.remove('inst'); }
@@ -1631,6 +1631,16 @@ $('#sharp').addEventListener('change', e => setBgSharp(+e.target.value));
 $('#b-shm').onclick = () => setBgSharp(+$('#sharp').value - 10);
 $('#b-shp').onclick = () => setBgSharp(+$('#sharp').value + 10);
 // Botones de la ayuda: minimalista (contorno blanco) o con los colores reales del mando detectado
+// Tarjetas del diseño Steam: 'steam' (la elegida crece apenas, como el original) o 'ps4' (se amplía como las baldosas de PS4)
+function setStZoom(s, save = true) {
+  stZoom = s === 'ps4' ? 'ps4' : 'steam';
+  $('#steam').classList.toggle('z4', stZoom === 'ps4');
+  $('#b-stzs').classList.toggle('on', stZoom === 'steam'); $('#b-stz4').classList.toggle('on', stZoom === 'ps4');
+  if (layout === 'steam') stPlace();
+  if (save) window.api.setCfg({ stZoom });
+}
+$('#b-stzs').onclick = () => setStZoom('steam');
+$('#b-stz4').onclick = () => setStZoom('ps4');
 function setBtnStyle(s, save = true) {
   document.body.classList.toggle('btncolor', s === 'color');
   $('#b-btmin').classList.toggle('on', s !== 'color'); $('#b-btcol').classList.toggle('on', s === 'color');
@@ -1778,7 +1788,6 @@ keyInput.addEventListener('keydown', async e => {
 let lastStep = 0;
 addEventListener('keydown', e => {
   if (tuning) return;
-  if (wiz) { if (e.key === 'Escape') wizEnd(false); return; }
   setHint(null);
   if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
@@ -1833,7 +1842,7 @@ addEventListener('keydown', e => {
 
 // ---------- Mando (solo mientras está visible) ----------
 // Funciona sin configurar nada con Xbox, PlayStation, Nintendo, cualquier mando "standard" y los DirectInput genéricos
-// (orden habitual: □ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9). Si un mando raro no encaja: Ajustes > Configurar botones.
+// (orden habitual: □ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9).
 // La ayuda de la parte de arriba muestra los botones del último dispositivo usado (teclado o el mando que hayas tocado).
 // L1+R1+L2+R2 a la vez abre/oculta el launcher: lo lee main.js (también con un juego delante), aquí solo se evita que esos botones actúen sueltos.
 const STD = { ok: [{ b: 0 }], back: [{ b: 1 }], remove: [{ b: 2 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }],
@@ -1854,7 +1863,7 @@ const BTN = {
 };
 const HAT = [[-1, '↑'], [-.43, '→'], [.14, '↓'], [.71, '←']];
 const KIND_NAME = { xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo', generic: 'Mando genérico' };
-let padMaps = {}, padIdx = -1, padSig = {}, hintKey = '', hintGp = null;   // hintGp: mando de la ayuda actual (null = teclado)
+let padIdx = -1, padSig = {}, hintKey = '', hintGp = null;   // hintGp: mando de la ayuda actual (null = teclado)
 // Un botón dibujado: círculo para los de cara (A, ✕…), píldora para el resto (L1, RB, Options) y tecla para el teclado.
 // La clase de color (xbox-A, ps-x…) solo pinta con "Botones: Colores" en Ajustes.
 const PS_CLS = { '✕': 'x', '○': 'o', '□': 's', '△': 't' };
@@ -1876,7 +1885,7 @@ function kindOf(gp) {
   if (/045e|xbox|xinput/.test(id)) return 'xbox';
   return gp.mapping === 'standard' ? 'xbox' : 'generic';      // estándar desconocido = mismo reparto que Xbox
 }
-const profileOf = gp => padMaps[gp.id] ? { ...PROFILES.generic, ...padMaps[gp.id] } : PROFILES[kindOf(gp)];
+const profileOf = gp => PROFILES[kindOf(gp)];
 // También con botones configurados a mano se muestra su nombre (✕, A, L1…), no "Botón 3"
 function lbl(bd, kind) {
   if (!bd) return '?';
@@ -1891,7 +1900,7 @@ function labelsOf(gp) {
   return o;
 }
 function setHint(gp) {                                        // gp = null -> teclado
-  const key = gp ? gp.id + (padMaps[gp.id] ? '*' : '') : 'kb';
+  const key = gp ? gp.id : 'kb';
   if (key === hintKey) return;
   hintKey = key;
   hintGp = gp;
@@ -1940,7 +1949,6 @@ function poll() {
     padSig[g.index] = s;
   }
   if (changed) { padIdx = gp.index; setHint(gp); }
-  if (wiz) { wizPoll(list.find(g => g.index === wiz.idx) || gp); return; }
 
   const P = profileOf(gp), on = k => (P[k] || []).some(bd => bound(gp, bd)), now = performance.now();
   // Hombros (L1 R1 L2 R2): esperan 180 ms antes de actuar; si en ese tiempo se aprieta otro, es la combinación de abrir/ocultar y no hacen nada
@@ -1979,56 +1987,9 @@ function poll() {
 const startPoll = () => { if (!pollT) pollT = setInterval(poll, 33); };
 const stopPoll = () => { clearInterval(pollT); pollT = null; };
 
-// ----- Asistente: asignar los botones de un mando que no es estándar -----
-const WIZ = [['ok', 'Aceptar / jugar'], ['back', 'Atrás / cerrar'], ['remove', 'Quitar juego'], ['cover', 'Cambiar portada'],
-  ['scan', 'Buscar juegos'], ['layout', 'Cambiar diseño'], ['upgrade', 'Portadas en HD'],['left', 'Mover a la izquierda'], ['right', 'Mover a la derecha']];
-let wiz = null;
-function wizRender() {
-  $('#pw-t').innerHTML = `Pulsa el botón para<br><b>${WIZ[wiz.step][1]}</b>`;
-  $('#pw-s').textContent = `Paso ${wiz.step + 1} de ${WIZ.length} · puedes omitir los que no necesites`;
-}
-function startWiz() {
-  const gp = curPad();
-  if (!gp) { toast('Pulsa un botón del mando para que se detecte'); return; }
-  wiz = { idx: gp.index, id: gp.id, step: 0, map: {}, base: [...gp.axes], rel: true };
-  $('#padwiz').classList.add('open'); wizRender();
-}
-function wizEnd(save) {
-  if (!wiz) return;
-  if (save) {
-    const used = Object.values(wiz.map).flat(), same = (x, y) => x.b != null ? x.b === y.b : x.a === y.a && x.s === y.s && x.v === y.v;
-    const full = { ...PROFILES.generic, ...wiz.map };
-    for (const [k] of WIZ) if (!wiz.map[k]) full[k] = full[k].filter(d => !used.some(u => same(d, u)));   // lo omitido no pisa lo asignado
-    padMaps[wiz.id] = full;
-    window.api.setCfg({ padMaps });
-    toast('Mando configurado');
-  }
-  wiz = null; $('#padwiz').classList.remove('open'); padInfo(); hintKey = ''; const g = curPad(); if (g) setHint(g);
-}
-function wizNext() { if (++wiz.step >= WIZ.length) wizEnd(true); else { wiz.rel = true; wizRender(); } }
-function wizPoll(gp) {
-  const bi = gp.buttons.findIndex(b => b.pressed);
-  let ax = -1;
-  for (let i = 0; i < gp.axes.length; i++) if (Math.abs(gp.axes[i] - (wiz.base[i] ?? 0)) > .5) { ax = i; break; }
-  const idle = bi < 0 && ax < 0;
-  if (wiz.rel) { if (idle) wiz.rel = false; return; }         // primero hay que soltar lo anterior
-  if (idle) return;
-  let bd;
-  if (bi >= 0) bd = { b: bi };
-  else { const v = gp.axes[ax]; bd = Math.abs(wiz.base[ax] ?? 0) < .2 ? { a: ax, s: v > 0 ? 1 : -1 } : { a: ax, v: Math.round(v * 100) / 100 }; }
-  wiz.map[WIZ[wiz.step][0]] = [bd];
-  wizNext();
-}
-$('#b-pad').onclick = startWiz;
-$('#pw-skip').onclick = () => wiz && wizNext();
-$('#pw-cancel').onclick = () => wizEnd(false);
-$('#b-padreset').onclick = () => {
-  const gp = curPad(); if (!gp) { toast('No hay ningún mando conectado'); return; }
-  delete padMaps[gp.id]; window.api.setCfg({ padMaps }); padInfo(); hintKey = ''; setHint(gp); toast('Botones restablecidos');
-};
 function padInfo() {
   const gp = curPad();
-  $('#padinfo').textContent = gp ? 'Mando: ' + KIND_NAME[kindOf(gp)] + (padMaps[gp.id] ? ' (personalizado)' : '') : 'Mando: ninguno detectado';
+  $('#padinfo').textContent = gp ? 'Mando: ' + KIND_NAME[kindOf(gp)] :'Mando: ninguno detectado';
 }
 
 // ---------- FPS (tecla F) ----------
@@ -2143,9 +2104,9 @@ window.api.onResume(() => {
   setPs3Src(c.ps3Src === 'video' ? 'video' : 'hd', false);
   bgVideoUrl = c.bgVideo || ''; setBgType(c.bgType || 'classic', false);
   setBtnStyle(c.btnStyle || 'min', false);
+  setStZoom(c.stZoom, false);
   setBg(c.bg !== false, false);
   setAuto(!!c.autostart, false); setMin(!!c.minimized, false); setTb(c.hideTaskbar !== false, false);
-  padMaps = c.padMaps || {};
   resize();
   window.api.onLibrary(() => load());
   window.api.onNote(m => toast(m, 5000));

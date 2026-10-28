@@ -10,8 +10,8 @@ y permite añadir cualquier .exe con portada automática.
   Aceptar jugar, atrás cerrar, cuadrado/X quitar, triángulo/Y portada, L1/LB buscar juegos, R1/RB cambia de diseño; cruceta o stick izquierdo para moverte.
   Dentro de **Ajustes** también se maneja con el mando (cruceta para moverte, aceptar pulsa, atrás cierra).
   Los mandos DirectInput genéricos (o PlayStation/8BitDo en modo D) también vienen predefinidos (□ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9)
-  y la ayuda muestra el nombre real de cada botón, también si lo configuraste a mano.
-  Si un mando raro no encaja: **Ajustes > Configurar botones** te pide cada botón y lo guarda para ese mando (**Restablecer** lo borra).
+  y la ayuda muestra el nombre real de cada botón. (Desde 1.22.0 ya no existe "Configurar botones".)
+  Al abrir el launcher se trae la ventana al frente con foco de verdad, así **el mando funciona enseguida** sin hacer clic antes.
 - **L1 + R1 + L2 + R2 a la vez** (LB RB LT RT en Xbox, L R ZL ZR en Nintendo): abre/oculta el launcher como Ctrl+Alt+P, **también con un juego delante**.
   Lo lee el ayudante de Windows (XInput + winmm); cada 3 s busca mandos y solo lee mientras haya alguno conectado.
   Con el launcher delante, L1/R1/L2 esperan 180 ms antes de actuar para no disparar sus acciones al hacer la combinación.
@@ -48,7 +48,7 @@ La tecla **L** (o R1/RB en el mando) va rotando entre los cuatro, y también se 
   Steam su banner `library_hero`) y el resto verticales, **siempre igual**. La elegida crece apenas (3,5 %) con un marco claro y su nombre
   y "Jugado hace…" debajo; la fila se desplaza sola **solo** cuando la elegida se iría de la pantalla (dejando ver la siguiente). El fondo
   pasa al **banner** del juego elegido en 0,25 s. Abajo, el botón **Recientes** (centrado, como en Steam) y los últimos jugados en tarjetas
-  apaisadas: **abajo** pasa el foco a Recientes (la píldora se ilumina), izquierda/derecha entre ellos, aceptar = jugar, **arriba** vuelve. Al entrar, las
+  apaisadas (Ajustes > **Tarjetas en Steam**: "Como Steam" o "Ampliar como PS4", que agranda la elegida y corre a las siguientes): **abajo** pasa el foco a Recientes (la píldora se ilumina), izquierda/derecha entre ellos, aceptar = jugar, **arriba** vuelve. Al entrar, las
   tarjetas llegan escalonadas desde la derecha y lo de abajo sube; al salir se van a la izquierda.
 - **PS3 (XMB)**: fondo morado con las cintas de seda; categorías en horizontal (**Juegos**, **Recientes**, **Herramientas** con Añadir y Buscar juegos,
   y **Ajustes**) y la lista de la categoría elegida en vertical. **Izquierda/derecha** cambia de categoría y **arriba/abajo** de elemento (también con la
