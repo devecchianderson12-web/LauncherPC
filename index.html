@@ -286,6 +286,19 @@
   .hd-c.f .hd-l { opacity: 1; }
   #hd-msg { grid-column: 1 / -1; align-self: center; text-align: center; font-size: calc(var(--u) * 30); opacity: .75; }
   #hd-foot { display: flex; gap: calc(var(--u) * 30); align-items: center; font-size: calc(var(--u) * 21); opacity: .85; flex-wrap: wrap; }
+  /* Música: la página es una vista aparte arriba de todo (570x1032, a la izquierda); esto es lo que queda al lado */
+  #mu { position: fixed; inset: 0; z-index: 14; background: rgba(0,4,24,.86); opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
+  #mu.open { opacity: 1; visibility: visible; transition: opacity .2s; }
+  #mu-side { position: absolute; left: calc(var(--u) * 610); top: calc(var(--u) * 150); width: calc(var(--u) * 900); display: flex; flex-direction: column; gap: calc(var(--u) * 26); }
+  #mu-title { font-size: calc(var(--u) * 40); font-weight: 300; }
+  #mu-hint { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 14) calc(var(--u) * 30); font-size: calc(var(--u) * 22); opacity: .85; }
+  #mu-hint .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); }
+  #mk { display: none; flex-direction: column; gap: calc(var(--u) * 14); padding: calc(var(--u) * 26); border-radius: calc(var(--u) * 24); background: rgba(12,30,92,.97); border: calc(var(--u) * 1.5) solid rgba(255,255,255,.18); }
+  #mk.open { display: flex; }
+  #mk-text { min-height: calc(var(--u) * 58); padding: calc(var(--u) * 10) calc(var(--u) * 18); border-radius: calc(var(--u) * 12); background: rgba(0,0,0,.35); font-size: calc(var(--u) * 28); white-space: nowrap; overflow: hidden; }
+  #mk-keys { display: grid; grid-template-columns: repeat(10, 1fr); gap: calc(var(--u) * 8); }
+  .mk-k { height: calc(var(--u) * 66); border-radius: calc(var(--u) * 10); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 26); cursor: pointer; }
+  .mk-k.f { background: #fff; color: #0c1e5c; }
   #hd-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); cursor: pointer; }
 </style>
 </head>
@@ -320,6 +333,8 @@
   <div id="pk-grid"></div>
   <div id="pk-foot"></div>
 </div>
+<div id="mu"><div id="mu-side"><div id="mu-title">YouTube Music</div><div id="mu-hint"></div>
+  <div id="mk"><div id="mk-text"></div><div id="mk-keys"></div></div></div></div>
 <div id="hdpick"><div class="hd-box">
   <div><div id="hd-title"></div><div id="hd-sub"></div>
     <div id="hd-tabs"><span id="hd-tl"></span><span data-k="cover">Portada</span><span data-k="banner">Banner del fondo</span><span id="hd-tr"></span></div></div>
@@ -362,7 +377,9 @@
 
 <script>
 const $ = s => document.querySelector(s);
+const SYS = { add: '+', cfg: '⚙', music: '♪' };             // baldosas que no son juegos, con su símbolo
 const ADD = { id: '_add', type: 'add', name: 'Añadir juego o aplicación' };
+const MUSIC = { id: '_music', type: 'music', name: 'YouTube Music' };
 const CFG = { id: '_cfg', type: 'cfg', name: 'Ajustes' };
 
 // Dos diseños, en unidades de 1920x1080
@@ -752,16 +769,16 @@ addEventListener('resize', resize);
 const SCAN = { id: '_scan', type: 'scan', name: 'Buscar juegos' };
 const IC = (body, dark = 'rgba(80,70,130,.9)') => `<svg viewBox="0 0 24 24" fill="#fff" stroke="${dark}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const XC = [
-  { id: 'games', name: 'Juegos', list: () => items.filter(g => g.type !== 'add' && g.type !== 'cfg'),
+  { id: 'games', name: 'Juegos', list: () => items.filter(g => !SYS[g.type]),
     icon: IC('<path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.6 2.6 0 0 1-4.4 1.3L14.6 15.5H9.4L7.7 17.6a2.6 2.6 0 0 1-4.4-1.3l-.7-3.4A4.5 4.5 0 0 1 7 7.5z" stroke="none"/><path d="M8.2 10.3v3.4M6.5 12h3.4"/><circle cx="15.4" cy="11" r=".9" fill="rgba(80,70,130,.9)" stroke="none"/><circle cx="17.4" cy="13" r=".9" fill="rgba(80,70,130,.9)" stroke="none"/>') },
   { id: 'recent', name: 'Recientes', list: () => items.filter(g => g.last).sort((a, b) => b.last - a.last),
     icon: IC('<circle cx="12" cy="12" r="9.3" stroke="none"/><path d="M12 6.8V12l3.4 2.2"/>') },
-  { id: 'tools', name: 'Herramientas', list: () => [ADD, SCAN],
+  { id: 'tools', name: 'Herramientas', list: () => [MUSIC, ADD, SCAN],
     icon: IC('<rect x="2.6" y="8" width="18.8" height="12.2" rx="2.2" stroke="none"/><path d="M8.8 8V6.4a1.2 1.2 0 0 1 1.2-1.2h4a1.2 1.2 0 0 1 1.2 1.2V8" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M2.6 13.4h18.8"/>') },
   { id: 'cfg', name: 'Ajustes', list: () => [CFG],
     icon: IC('<g stroke="none"><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2"/><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2" transform="rotate(45 12 12)"/><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2" transform="rotate(90 12 12)"/><rect x="10.4" y="1.6" width="3.2" height="20.8" rx="1.2" transform="rotate(135 12 12)"/><circle cx="12" cy="12" r="6.6"/></g><circle cx="12" cy="12" r="2.6" fill="rgba(80,70,130,.9)" stroke="none"/>') }
 ];
-const SUB = { steam: 'Steam', epic: 'Epic Games', custom: 'Aplicación', add: 'Elige un juego o programa', cfg: 'Opciones del launcher', scan: 'Busca juegos nuevos en Steam y Epic' };
+const SUB = { steam: 'Steam', epic: 'Epic Games', custom: 'Aplicación', add: 'Elige un juego o programa', cfg: 'Opciones del launcher', music: 'Música', scan: 'Busca juegos nuevos en Steam y Epic' };
 const XM = { cx: 565, cy: 290, cs: 205, sy: 505, by: 679, ay: 119, rs: 80 };   // posiciones en unidades de 1920x1080
 let xcats = [], xcat = 0, xrow = 0, xcEls = [], xrEls = [], xmem = {};
 const idxOf = it => items.findIndex(g => g.id === it.id);
@@ -770,6 +787,7 @@ function fillIcon(ic, it) {
   ic.textContent = '';
   if (it.type === 'add') ic.textContent = '+';
   else if (it.type === 'cfg') ic.textContent = '⚙';
+  else if (it.type === 'music') ic.textContent = '♪';
   else if (it.type === 'scan') ic.textContent = '⟳';
   else if (covers[it.id]) { const im = new Image(); im.draggable = false; im.src = covers[it.id]; ic.appendChild(im); }
   else ic.textContent = (it.name || '?').trim().charAt(0).toUpperCase();
@@ -914,9 +932,9 @@ function buildTile(it, i) {
   const t = document.createElement('div');
   t.className = 'tile';
   const art = document.createElement('div'); art.className = 'art'; t.appendChild(art);
-  if (it.type === 'add' || it.type === 'cfg') {
+  if (SYS[it.type]) {
     t.classList.add('special');
-    art.textContent = it.type === 'add' ? '+' : '⚙';
+    art.textContent = SYS[it.type];
   } else {
     const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = it.name; art.appendChild(ph);
     t._setImg = (url, instant) => {
@@ -948,7 +966,7 @@ function render() {
 
 async function load(force) {
   const games = await window.api.games();
-  const next = [...games, ADD, CFG];
+  const next = [...games, MUSIC, ADD, CFG];
   const s = next.map(g => g.id).join('|');
   const curId = items[sel]?.id;
   items = next;
@@ -995,7 +1013,7 @@ function stHero(c) {                                           // la tarjeta anc
 function stCard(it, i) {
   const c = document.createElement('div'); c.className = 'sc'; c._it = it;
   c.style.width = stW(i) * u + 'px';
-  if (it.type === 'add' || it.type === 'cfg') { c.classList.add('sp'); c.textContent = it.type === 'add' ? '+' : '⚙'; }
+  if (SYS[it.type]) { c.classList.add('sp'); c.textContent = SYS[it.type]; }
   else { const n = document.createElement('div'); n.className = 'scn'; n.textContent = it.name; c.appendChild(n); stCover(c, it); }
   const pad = document.createElement('div'); pad.className = 'pad'; pad.innerHTML = PAD_ICON; c.appendChild(pad);
   if (i === 0 && !c.classList.contains('sp')) stHero(c);
@@ -1097,7 +1115,7 @@ function updateRecent() {
 }
 
 // Sin escaneo automático: si la biblioteca está vacía se avisa de cómo buscar
-function hintEmpty() { if (items.length <= 2) toast('Pulsa S para buscar tus juegos (o + para añadir uno)', 7000); }
+function hintEmpty() { if (items.length <= 3) toast('Pulsa S para buscar tus juegos (o + para añadir uno)', 7000); }
 
 // ---------- Acciones ----------
 function toast(msg, ms = 2200) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms); }
@@ -1135,7 +1153,7 @@ function armArt() {
   hideArt();
   const it = items[sel];
   if (layout === 'steam' && stZone === 'rec') return;
-  if (layout === 'ps3' || !it || it.type === 'add' || it.type === 'cfg' || !(covers[it.id] || (layout === 'steam' && heroUrl(it))) || launching || settingsOpen() || pickerOpen() || hdOpen()) return;
+  if (layout === 'ps3' || !it || SYS[it.type] || !(covers[it.id] || (layout === 'steam' && heroUrl(it))) || launching || settingsOpen() || pickerOpen() || hdOpen()) return;
   artT = setTimeout(() => showArt(it), layout === 'steam' ? 250 : 1000);   // en Steam el fondo cambia casi enseguida, como el original
 }
 // preview = true: se dibuja aunque Ajustes esté abierto (para ver el difuminado mientras mueves la barra)
@@ -1194,7 +1212,8 @@ async function activate() {
       }
       return true;
     });
-  } else if (it.type === 'cfg') openSettings();
+  } else if (it.type === 'music') musicOpen();
+  else if (it.type === 'cfg') openSettings();
   else launchGame(it);
 }
 // ---------- Explorador propio (portadas con C, añadir juegos, carpetas, video de fondo) ----------
@@ -1216,7 +1235,7 @@ function setCoverUrl(it, url) {
 }
 async function changeCover() {
   const it = items[sel];
-  if (!it || it.type === 'add' || it.type === 'cfg' || pickerOpen()) return;
+  if (!it || SYS[it.type] || pickerOpen()) return;
   pkStart('cover', 'Portada: ' + it.name, it, async file => {
     const url = await window.api.pickApply(it.id, file);
     if (!url) { toast('No se pudo usar esa imagen'); return false; }
@@ -1336,6 +1355,84 @@ function pkHint() {
   const parts = [[L.ok, 'elegir / abrir'], [L.back, 'carpeta de arriba'], [L.cover, 'cerrar'], [L.scan, 'página arriba'], [L.layout, 'página abajo']];
   $('#pk-foot').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('') + (gp ? '' : '<span class="hk">Clic derecho: atrás</span>');
 }
+// ---------- Música (YouTube Music) y mini teclado ----------
+// La página la muestra main.js en una vista propia; aquí se reparte lo que hace el mando. El panel se abre con la baldosa ♪ o con M.
+// Cerrar solo lo oculta: la música sigue. El mini teclado escribe en el campo de la página o, sin campo, busca en YouTube Music.
+const muEl = $('#mu'), mkEl = $('#mk'), muOn = () => muEl.classList.contains('open'), mkOn = () => mkEl.classList.contains('open');
+const MK_ROWS = [[...'1234567890'], [...'qwertyuiop'], [...'asdfghjklñ'], [...'zxcvbnm@._'], [['⇧', 2], ['-', 1], ['espacio', 3], ['⌫', 2], ['✓', 2]]].map(r => r.map(k => Array.isArray(k) ? k : [k, 1]));
+let mk = { r: 1, c: 0, text: '', up: false, field: false, pass: false }, mkEls = [];
+function musicOpen() {
+  if (muOn() || launching) return;
+  hideArt(); document.activeElement?.blur();
+  muEl.classList.add('open'); muHint(); window.api.musicShow(true);
+}
+function musicClose() {
+  if (!muOn()) return;
+  mkClose(); muEl.classList.remove('open'); window.api.musicShow(false); armArt();
+}
+function muHint() {
+  if (!muOn()) return;
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc', remove: 'K', cover: 'Espacio', scan: 'Q', layout: 'E' };
+  const on = mkOn(), parts = on ? [[L.ok, 'pulsar tecla'], [L.back, 'cerrar teclado']]
+    : [[L.ok, 'elegir'], [L.remove, 'teclado'], [L.cover, 'pausa'], [L.scan, 'anterior'], [L.layout, 'siguiente'], [L.back, 'cerrar (la música sigue)']];
+  $('#mu-hint').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('');
+}
+const musicCmd = (c, ...a) => window.api.musicCmd(c, ...a);
+async function musicOk() { const r = await musicCmd('ok'); if (r?.field) mkOpen(r); }
+async function musicKeys() { mkOpen(await musicCmd('active')); }
+function mkOpen(f) {
+  mk = { r: 1, c: 0, text: f?.value || '', up: false, field: !!f?.field, pass: !!f?.pass };
+  mkEl.classList.add('open'); mkDraw(); muHint();
+}
+function mkClose() { mkEl.classList.remove('open'); muHint(); }
+function mkDraw() {
+  const box = $('#mk-keys'); box.textContent = ''; mkEls = [];
+  MK_ROWS.forEach((row, r) => { mkEls[r] = []; row.forEach(([key, span], c) => {
+    const b = document.createElement('div'); b.className = 'mk-k'; b.style.gridColumn = 'span ' + span;
+    b.textContent = key.length === 1 && mk.up ? key.toUpperCase() : key === '✓' ? (mk.field ? 'Enviar' : 'Buscar') : key;
+    b.onclick = () => { mk.r = r; mk.c = c; mkPress(); };
+    box.appendChild(b); mkEls[r][c] = b;
+  }); });
+  mkMark(); mkShow();
+}
+function mkMark() { mkEls.flat().forEach(b => b.classList.remove('f')); mkEls[mk.r][mk.c].classList.add('f'); }
+function mkShow() { $('#mk-text').textContent = mk.pass ? '•'.repeat(mk.text.length) : mk.text || (mk.field ? '' : 'Buscar música…'); }
+function mkMove(dx, dy) {
+  if (dy) { const was = MK_ROWS[mk.r].length; mk.r = Math.max(0, Math.min(MK_ROWS.length - 1, mk.r + dy)); mk.c = Math.min(MK_ROWS[mk.r].length - 1, Math.round(mk.c * MK_ROWS[mk.r].length / was)); }
+  else mk.c = Math.max(0, Math.min(MK_ROWS[mk.r].length - 1, mk.c + dx));
+  mkMark();
+}
+function mkPut(t) { mk.text = t; mkShow(); if (mk.field) musicCmd('type', t); }
+function mkDone() {
+  if (mk.field) musicCmd('enter'); else if (mk.text.trim()) window.api.musicSearch(mk.text.trim());
+  mkClose();
+}
+function mkPress() {
+  const key = MK_ROWS[mk.r][mk.c][0];
+  if (key === '⇧') { mk.up = !mk.up; mkDraw(); }
+  else if (key === '⌫') mkPut(mk.text.slice(0, -1));
+  else if (key === '✓') mkDone();
+  else mkPut(mk.text + (key === 'espacio' ? ' ' : mk.up ? key.toUpperCase() : key));
+}
+function musicKey(e) {                                       // teclado físico mientras el panel está abierto
+  const k = e.key;
+  if (mkOn()) {
+    if (k === 'Escape') mkClose();
+    else if (k === 'Enter') mkDone();
+    else if (k === 'Backspace') mkPut(mk.text.slice(0, -1));
+    else if (k.startsWith('Arrow')) mkMove(k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0);
+    else if (k.length === 1) mkPut(mk.text + k);
+    return;
+  }
+  if (k === 'Escape' || k.toLowerCase() === 'm') musicClose();
+  else if (k.startsWith('Arrow')) musicCmd('move', k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0);
+  else if (k === 'Enter') musicOk();
+  else if (k === ' ') musicCmd('play');
+  else if (k.toLowerCase() === 'k') musicKeys();
+  else if (k.toLowerCase() === 'q') musicCmd('prev');
+  else if (k.toLowerCase() === 'e') musicCmd('next');
+}
+window.api.onMusicGone?.(() => { if (muOn()) { mkClose(); muEl.classList.remove('open'); toast('Se cerró YouTube Music'); armArt(); } });
 // ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
 // Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 50 portadas (5 columnas con scroll) de internet o de su carpeta
 // de 600x900 o más (nunca menos). Aceptar aplica la marcada · atrás / △ / Esc cierra. Sin resultados ofrece buscar en el PC.
@@ -1346,7 +1443,7 @@ let hd = null;
 // el fondo y Recientes; no cambia la portada). Se cambia con Tab / Q·E en el teclado, L1·R1 en el mando o con un clic.
 async function upgradeCovers(kind = 'cover') {
   const it = items[sel];
-  if (hd || pickerOpen() || !it || it.type === 'add' || it.type === 'cfg') return;
+  if (hd || pickerOpen() || !it || SYS[it.type]) return;
   const info = await window.api.hdInfo(it.id);
   if (!info) return;
   hd = { it, info, kind, opts: [], f: 0, seq: 0, busy: false, none: false };
@@ -1808,6 +1905,7 @@ addEventListener('keydown', e => {
   setHint(null);
   if (settingsOpen() && !pickerOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
+  if (muOn()) { musicKey(e); e.preventDefault(); return; }
   if (hdOpen()) {
     if (k === 'ArrowRight') hdMove(1);
     else if (k === 'ArrowLeft') hdMove(-1);
@@ -1853,6 +1951,7 @@ addEventListener('keydown', e => {
   else if (k.toLowerCase() === 'c') changeCover();
   else if (k.toLowerCase() === 's') rescan();
   else if (k.toLowerCase() === 'p') upgradeCovers();
+  else if (k.toLowerCase() === 'm') musicOpen();
   else if (k.toLowerCase() === 'l') setLayout(nextLayout());
   else if (k.toLowerCase() === 'f') toggleFps();
 });
@@ -1924,6 +2023,7 @@ function setHint(gp) {                                        // gp = null -> te
   $('#hint').innerHTML = gp ? hintHtml(labelsOf(gp), kindOf(gp)) : hintHtml(KB_KEYS, 'kb');
   if (pickerOpen()) pkHint();
   if (hdOpen()) hdHint();
+  muHint();
 }
 setHint(null);
 const padList = () => [...(navigator.getGamepads() || [])].filter(Boolean);
@@ -1972,6 +2072,19 @@ function poll() {
   const shN = [4, 5, 6, 7].filter(b => gp.buttons[b]?.pressed).length;
   if (shN >= 2) { shBlock = true; clearTimeout(shT); shT = null; } else if (!shN) shBlock = false;
   const sh = fn => () => { if (shBlock) return; clearTimeout(shT); shT = setTimeout(() => { shT = null; if (!shBlock) fn(); }, 180); };
+  if (muOn()) {
+    if (mkOn()) {
+      edge('ok', on('ok'), mkPress); edge('back', on('back'), mkClose); edge('cover', on('cover'), mkDone);
+      repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => mkMove(d, 0));
+      repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => mkMove(0, d));
+    } else {
+      edge('ok', on('ok'), musicOk); edge('back', on('back'), musicClose); edge('remove', on('remove'), musicKeys); edge('cover', on('cover'), () => musicCmd('play'));
+      edge('scan', on('scan'), sh(() => musicCmd('prev'))); edge('layout', on('layout'), sh(() => musicCmd('next')));
+      repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => musicCmd('move', d, 0));
+      repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => musicCmd('move', 0, d));
+    }
+    return;
+  }
   if (hdOpen()) {
     edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose); edge('remove', on('remove'), hdPc);
     edge('scan', on('scan'), sh(() => hdTab(-1))); edge('layout', on('layout'), sh(() => hdTab(1)));     // L1 / R1: pestaña Portada / Banner
@@ -2084,7 +2197,7 @@ window.api.onEnter(async () => {
   if (!moved) { sel = 0; place(true); updateInfo(); }
   armArt(); hintEmpty(); autotune();
 });
-window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hdClose(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
+window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hdClose(); musicClose(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
 
 // ---------- Pausa: otro programa está en primer plano ----------
 // La ventana sigue detrás con su último fotograma, pero sin fondo animado, mando, reloj ni temporizadores: no consume nada.

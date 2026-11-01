@@ -84,6 +84,9 @@ la optimización de gráficos y también si el launcher se cierra a la fuerza (e
 Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece difuminada de fondo (con fundido suave);
 al moverte, vuelve el fondo de cintas. (Su difuminado es fijo; el ajuste de difuminado ahora es del fondo animado, ver abajo.)
 
+## Música (baldosa ♪ / tecla M)
+YouTube Music en un panel con bordes redondeados a la izquierda, dentro del launcher, sin barra de título. Con el mando: cruceta mueve el marco, aceptar elige, X·□ abre el mini teclado, △·Y pausa, L1/R1 anterior/siguiente, atrás cierra (**la música sigue**). Teclado: flechas, Enter, K, Espacio, Q/E, Esc.
+
 ## Explorador propio (portadas, añadir juegos, carpetas, video)
 El launcher **nunca abre el explorador de Windows**: portada (C / △ / Y), añadir juego o acceso directo (.exe, .lnk, .url, .bat, con su icono y el menú Inicio como lugar), carpeta de juegos ("Usar esta carpeta") y video de fondo usan el mismo. Se abre un explorador **a pantalla completa con cuadros grandes** (miniatura de cada imagen), pensado para verse de lejos.
 - Arriba, lugares rápidos: **Carpeta del juego**, Imágenes, Descargas, Escritorio, Documentos y los discos.
