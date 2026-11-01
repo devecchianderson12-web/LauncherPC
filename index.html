@@ -295,6 +295,18 @@
   #mu-hint .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); }
   #mk { display: none; flex-direction: column; gap: calc(var(--u) * 14); padding: calc(var(--u) * 26); border-radius: calc(var(--u) * 24); background: rgba(12,30,92,.97); border: calc(var(--u) * 1.5) solid rgba(255,255,255,.18); }
   #mk.open { display: flex; }
+  /* Modo superpuesto (Start + Select con otra app delante): solo el panel de música; la ayuda abajo y el teclado bajo la página */
+  body.overlay { background: #000; }
+  body.overlay > *:not(#mu):not(#toast) { visibility: hidden !important; }
+  body.overlay #mu { background: #000; transition: none; }
+  body.overlay #mu-side { left: 0; top: calc(var(--u) * 1032); width: 100%; padding: 0 calc(var(--u) * 14); box-sizing: border-box; gap: calc(var(--u) * 10); }
+  body.overlay.kb #mu-side { top: calc(var(--u) * 540); }
+  body.overlay #mu-title { display: none; }
+  body.overlay #mu-hint { order: 2; flex-wrap: nowrap; overflow: hidden; height: calc(var(--u) * 48); align-items: center; gap: calc(var(--u) * 14); font-size: calc(var(--u) * 15); white-space: nowrap; }
+  body.overlay #mk { order: 1; padding: calc(var(--u) * 12); gap: calc(var(--u) * 8); border-radius: calc(var(--u) * 16); }
+  body.overlay #mk-text { min-height: calc(var(--u) * 44); font-size: calc(var(--u) * 22); }
+  body.overlay #mk-keys { gap: calc(var(--u) * 5); }
+  body.overlay .mk-k { height: calc(var(--u) * 58); font-size: calc(var(--u) * 20); }
   #mk-text { min-height: calc(var(--u) * 58); padding: calc(var(--u) * 10) calc(var(--u) * 18); border-radius: calc(var(--u) * 12); background: rgba(0,0,0,.35); font-size: calc(var(--u) * 28); white-space: nowrap; overflow: hidden; }
   #mk-keys { display: grid; grid-template-columns: repeat(10, 1fr); gap: calc(var(--u) * 8); }
   .mk-k { height: calc(var(--u) * 66); border-radius: calc(var(--u) * 10); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 26); cursor: pointer; }
@@ -701,7 +713,7 @@ const bgVid = $('#bgvid');
 let shown = false;
 function syncWave() {
   const c = document.body.classList;
-  const live = shown && !c.contains('nobg') && !c.contains('hasart') && !c.contains('waiting') && !c.contains('leaving') && !c.contains('paused');
+  const live = shown && !c.contains('overlay') && !c.contains('nobg') && !c.contains('hasart') && !c.contains('waiting') && !c.contains('leaving') && !c.contains('paused');
   const vid = c.contains('bgvideo') && !!bgVid.getAttribute('src');
   Wave.set(live && !vid);
   if (vid && live) { if (bgVid.paused) bgVid.play().catch(() => {}); }
@@ -756,7 +768,7 @@ function sizeTiles() {
   tiles.forEach(t => { t.style.width = c.bw * c.ss * u + 'px'; t.style.height = c.bh * c.ss * u + 'px'; t.style.setProperty('--k', c.ss * u); });
 }
 function resize() {
-  u = Math.min(innerWidth / 1920, innerHeight / 1080);
+  u = document.body.classList.contains('overlay') ? innerHeight / 1080 : Math.min(innerWidth / 1920, innerHeight / 1080);   // superpuesto la ventana es angosta
   document.documentElement.style.setProperty('--u', u + 'px');
   sizeTiles(); placeStatic(); place(true); Wave.size(); applyBgBlur();
 }
@@ -1366,15 +1378,33 @@ function musicOpen() {
   hideArt(); document.activeElement?.blur();
   muEl.classList.add('open'); muHint(); window.api.musicShow(true);
 }
-function musicClose() {
+function musicClose(quiet) {
   if (!muOn()) return;
   mkClose(); muEl.classList.remove('open'); window.api.musicShow(false); armArt();
+  if (!quiet && document.body.classList.contains('overlay')) window.api.overlayClose();
 }
+async function musicExpand() { if (await window.api.musicExpand()) setTimeout(() => musicCmd('show'), 900); }
+// Start + Select (lo lee main.js): con el launcher delante abre o cierra el panel; con otra app delante la ventana pasa a modo superpuesto
+window.api.onMusicToggle(() => { if (muOn()) musicClose(); else if (!settingsOpen() && !pickerOpen()) musicOpen(); });
+window.api.onOverlay((on, hidden) => {
+  const c = document.body.classList;
+  if (on) {
+    c.add('overlay'); c.remove('paused', 'leaving'); shown = true;
+    if (launching) endLaunch();
+    resize(); prev = {}; startPoll(); musicOpen();
+  } else {
+    c.remove('overlay', 'kb'); musicClose(true); resize();
+    if (hidden) { stopPoll(); c.add('leaving'); shown = false; }
+  }
+  syncWave();
+});
 function muHint() {
   if (!muOn()) return;
-  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Retroceso', remove: 'K', cover: 'Espacio', scan: 'Q', layout: 'E', upgrade: 'Esc' };
-  const on = mkOn(), parts = on ? [[L.ok, 'pulsar tecla'], [gp ? L.back : 'Esc', 'cerrar teclado']]
-    : [[L.ok, 'elegir'], [L.back, 'atrás'], [L.remove, 'teclado'], [L.cover, 'pausa'], [L.scan, 'anterior'], [L.layout, 'siguiente'], [L.upgrade, 'cerrar (la música sigue)']];
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Retroceso', remove: 'K', cover: 'Espacio', scan: 'Q', layout: 'E', upgrade: 'Esc', player: 'R' };
+  const ov = document.body.classList.contains('overlay'), on = mkOn();
+  const parts = on ? [[L.ok, 'tecla'], [gp ? L.back : 'Esc', 'cerrar teclado']]
+    : ov ? [[L.ok, 'elegir'], [L.back, 'atrás'], [L.player, 'reproductor'], [L.remove, 'teclado'], [L.upgrade, 'cerrar']]
+    : [[L.ok, 'elegir'], [L.back, 'atrás'], [L.player, 'abrir reproductor'], [L.remove, 'teclado'], [L.cover, 'pausa'], [L.scan, 'anterior'], [L.layout, 'siguiente'], [L.upgrade, 'cerrar (la música sigue)']];
   $('#mu-hint').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('');
 }
 const musicCmd = (c, ...a) => window.api.musicCmd(c, ...a);
@@ -1383,9 +1413,11 @@ async function musicBack() { if (await window.api.musicBack()) setTimeout(() => 
 async function musicKeys() { mkOpen(await musicCmd('active')); }
 function mkOpen(f) {
   mk = { r: 1, c: 0, text: f?.value || '', up: false, field: !!f?.field, pass: !!f?.pass };
-  mkEl.classList.add('open'); mkDraw(); muHint();
+  mkEl.classList.add('open'); mkDraw(); muHint(); mkRoom(true);
 }
-function mkClose() { mkEl.classList.remove('open'); muHint(); }
+function mkClose() { const was = mkOn(); mkEl.classList.remove('open'); muHint(); if (was) mkRoom(false); }
+// Superpuesto no hay lugar al costado: el teclado va debajo y la página se acorta mientras está abierto
+function mkRoom(on) { if (document.body.classList.contains('overlay')) { document.body.classList.toggle('kb', on); window.api.musicKb(on); } }
 function mkDraw() {
   const box = $('#mk-keys'); box.textContent = ''; mkEls = [];
   MK_ROWS.forEach((row, r) => { mkEls[r] = []; row.forEach(([key, span], c) => {
@@ -1431,6 +1463,7 @@ function musicKey(e) {                                       // teclado físico 
   else if (k === 'Enter') musicOk();
   else if (k === ' ') musicCmd('play');
   else if (k.toLowerCase() === 'k') musicKeys();
+  else if (k.toLowerCase() === 'r') musicExpand();
   else if (k.toLowerCase() === 'q') musicCmd('prev');
   else if (k.toLowerCase() === 'e') musicCmd('next');
 }
@@ -1963,13 +1996,13 @@ addEventListener('keydown', e => {
 // (orden habitual: □ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9).
 // La ayuda de la parte de arriba muestra los botones del último dispositivo usado (teclado o el mando que hayas tocado).
 // L1+R1+L2+R2 a la vez abre/oculta el launcher: lo lee main.js (también con un juego delante), aquí solo se evita que esos botones actúen sueltos.
-const STD = { ok: [{ b: 0 }], back: [{ b: 1 }], remove: [{ b: 2 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }],
+const STD = { ok: [{ b: 0 }], back: [{ b: 1 }], remove: [{ b: 2 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }], player: [{ b: 7 }],
   up: [{ b: 12 }, { a: 1, s: -1 }], down: [{ b: 13 }, { a: 1, s: 1 }], left: [{ b: 14 }, { a: 0, s: -1 }], right: [{ b: 15 }, { a: 0, s: 1 }] };
 const PROFILES = {
   xbox: STD, ps: STD,
   nin: { ...STD, ok: [{ b: 1 }], back: [{ b: 0 }], remove: [{ b: 3 }], cover: [{ b: 2 }] },          // en Nintendo A es el botón de la derecha
   // DirectInput: 0 □ (oeste) · 1 ✕ (sur) · 2 ○ (este) · 3 △ (norte); la cruceta llega como eje 9 (arriba -1, derecha -0,43, abajo 0,14, izquierda 0,71)
-  generic: { ok: [{ b: 1 }], back: [{ b: 2 }], remove: [{ b: 0 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }],
+  generic: { ok: [{ b: 1 }], back: [{ b: 2 }], remove: [{ b: 0 }], cover: [{ b: 3 }], scan: [{ b: 4 }], layout: [{ b: 5 }], upgrade: [{ b: 6 }], player: [{ b: 7 }],
     up: [{ a: 9, v: -1 }, { a: 1, s: -1 }], down: [{ a: 9, v: .14 }, { a: 1, s: 1 }], left: [{ a: 9, v: .71 }, { a: 0, s: -1 }], right: [{ a: 9, v: -.43 }, { a: 0, s: 1 }] }
 };
 // Nombre de cada botón según el tipo de mando (índices de la API Gamepad)
@@ -2014,7 +2047,7 @@ function lbl(bd, kind) {
 }
 function labelsOf(gp) {
   const k = kindOf(gp), P = profileOf(gp), o = {};
-  for (const a of ['ok', 'back', 'remove', 'cover', 'scan', 'layout', 'upgrade']) o[a] = lbl(P[a]?.[0], k);
+  for (const a of ['ok', 'back', 'remove', 'cover', 'scan', 'layout', 'upgrade', 'player']) o[a] = lbl(P[a]?.[0], k);
   return o;
 }
 function setHint(gp) {                                        // gp = null -> teclado
@@ -2080,7 +2113,7 @@ function poll() {
       repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => mkMove(d, 0));
       repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => mkMove(0, d));
     } else {
-      edge('ok', on('ok'), musicOk); edge('back', on('back'), musicBack); edge('upgrade', on('upgrade'), sh(musicClose)); edge('remove', on('remove'), musicKeys); edge('cover', on('cover'), () => musicCmd('play'));
+      edge('ok', on('ok'), musicOk); edge('back', on('back'), musicBack); edge('upgrade', on('upgrade'), sh(musicClose)); edge('player', on('player'), sh(musicExpand)); edge('remove', on('remove'), musicKeys); edge('cover', on('cover'), () => musicCmd('play'));
       edge('scan', on('scan'), sh(() => musicCmd('prev'))); edge('layout', on('layout'), sh(() => musicCmd('next')));
       repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => musicCmd('move', d, 0));
       repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => musicCmd('move', 0, d));

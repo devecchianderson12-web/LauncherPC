@@ -85,7 +85,9 @@ Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece d
 al moverte, vuelve el fondo de cintas. (Su difuminado es fijo; el ajuste de difuminado ahora es del fondo animado, ver abajo.)
 
 ## Música (baldosa ♪ / tecla M)
-YouTube Music en un panel con bordes redondeados a la izquierda, dentro del launcher, sin barra de título. Un recuadro blanco redondeado marca lo elegido (solo cosas visibles; los carruseles y la página se desplazan solos). Con el mando: cruceta mueve, aceptar elige (en un campo abre el mini teclado), **atrás vuelve a la página anterior como un navegador** (minimiza el reproductor, sale de Google; sin nada atrás, cierra), LT·L2 cierra (**la música sigue**), X·□ mini teclado, △·Y pausa, L1/R1 anterior/siguiente. Teclado: flechas, Enter, Retroceso (atrás), Esc (cerrar), K, Espacio, Q/E.
+YouTube Music en un panel con bordes redondeados a la izquierda, dentro del launcher, sin barra de título. Un recuadro blanco redondeado marca lo elegido (solo cosas visibles; los carruseles y la página se desplazan solos). Con el mando: cruceta mueve, aceptar elige (en un campo abre el mini teclado), **atrás vuelve a la página anterior como un navegador** (minimiza el reproductor, sale de Google; sin nada atrás, cierra), LT·L2 cierra (**la música sigue**), **RT·R2 abre el reproductor** (después de ir atrás queda solo la barra de abajo), X·□ mini teclado, △·Y pausa, L1/R1 anterior/siguiente. Teclado: flechas, Enter, Retroceso (atrás), Esc (cerrar), R (reproductor), K, Espacio, Q/E.
+
+**Start + Select a la vez, en cualquier mando y con cualquier programa delante**: el panel de música aparece superpuesto a la izquierda, arriba de todo (la ayuda abajo y el mini teclado debajo de la página). El mismo combo, LT o atrás sin páginas lo cierra y el foco vuelve al programa de antes. Con el launcher delante, el combo abre o cierra el panel normal. Juegos en pantalla completa exclusiva: Windows no deja superponer nada (usar ventana sin bordes).
 Incluye un bloqueador de anuncios (Ghostery, con listas tipo uBlock) solo para este panel; algunos anuncios pueden pasar.
 
 ## Explorador propio (portadas, añadir juegos, carpetas, video)

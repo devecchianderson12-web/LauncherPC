@@ -771,13 +771,15 @@ function holdFront() {
 }
 function dropFront() {
   frontUntil = 0; clearInterval(frontT); frontT = null;
-  if (win && !win.isDestroyed()) win.setAlwaysOnTop(false);
+  if (win && !win.isDestroyed() && !overlayOn) win.setAlwaysOnTop(false);
 }
 // Al ocultar se espera ~190 ms para que la interfaz haga su animación de salida antes de esconder la ventana
 let hideT = null;
 function showLauncher() {
   if (!win) return;
   clearTimeout(hideT); hideT = null;
+  if (overlayOn) closeOverlay();
+  restoreFull();
   if (paused) { resumeLauncher(true); holdFront(); return; }     // ya estaba visible detrás de otro programa: solo estaba congelado
   win.show(); toFront(); holdFront();
   win.webContents.send('enter');
@@ -786,6 +788,7 @@ function showLauncher() {
 }
 function hideLauncher() {
   if (!win || !win.isVisible() || hideT) return;
+  if (overlayOn) { closeOverlay(); return; }
   if (paused) resumeLauncher(false);
   dropFront();
   stopStats(); clearTimeout(launchT); launchT = null;
@@ -862,17 +865,19 @@ public static class SH {
   [DllImport(\"winmm.dll\")] static extern uint joyGetDevCapsW(UIntPtr id, byte[] caps, uint size);
   static TimerProc padScanTp, padPollTp;
   static bool[] xOn = new bool[4]; static System.Collections.Generic.List<uint> joys = new System.Collections.Generic.List<uint>();
-  static UIntPtr padPollId; static bool comboDown, anyBtn, anyDown, xinputOk = true;
+  static UIntPtr padPollId; static bool comboDown, anyBtn, anyDown, mus, musDown, xinputOk = true;
 
   static JOYEX NewJoy() { JOYEX j = new JOYEX(); j.size = (uint)Marshal.SizeOf(typeof(JOYEX)); j.flags = 0x80; return j; }   // JOY_RETURNBUTTONS
   static bool XCombo(uint i) {
     XST s; if (XInputGetState(i, out s) != 0) { xOn[i] = false; return false; }
     if (s.pad.buttons != 0 || s.pad.lt > 100 || s.pad.rt > 100) anyBtn = true;
+    if ((s.pad.buttons & 0x0030) == 0x0030) mus = true;                                 // Start + Back (View/Menu)
     return (s.pad.buttons & 0x0300) == 0x0300 && s.pad.lt > 100 && s.pad.rt > 100;     // LB + RB + LT + RT
   }
   static bool JCombo(uint id) {
     JOYEX j = NewJoy(); if (joyGetPosEx(id, ref j) != 0) return false;
     if (j.buttons != 0) anyBtn = true;
+    if ((j.buttons & 0x300) == 0x300) mus = true;                                        // DirectInput: Select (9) + Start (10)
     return (j.buttons & 0xF0) == 0xF0;
   }
   static void PadScan(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
@@ -895,19 +900,21 @@ public static class SH {
     else if (!any && padPollId != UIntPtr.Zero) { KillTimer(IntPtr.Zero, padPollId); padPollId = UIntPtr.Zero; comboDown = false; }
   }
   static void PadPoll(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
-    bool c = false; anyBtn = false;
+    bool c = false; anyBtn = false; mus = false;
     try {
       if (xinputOk) for (uint i = 0; i < 4; i++) if (xOn[i] && XCombo(i)) c = true;
       foreach (uint j in joys) if (JCombo(j)) c = true;
     } catch {}
     if (c && !comboDown) { Console.WriteLine(\"PAD\"); Console.Out.Flush(); }   // una vez por pulsacion: hay que soltar para repetir
     comboDown = c;
+    if (mus && !musDown) { Console.WriteLine(\"MUSIC\"); Console.Out.Flush(); }        // Start + Select: el panel de musica encima de todo
+    musDown = mus;
     // Boton del mando con el escritorio delante (nadie tiene el foco): el launcher visible vuelve a tomarlo. Con un juego delante no se toca nada.
     if (anyBtn && !anyDown && last == \"NONE\") { Console.WriteLine(\"PADWAKE\"); Console.Out.Flush(); }
     anyDown = anyBtn;
   }
 
-  static uint self; static string last = \"\"; static volatile bool tb;
+  static uint self; static string last = \"\"; static volatile bool tb; static IntPtr lastOther;
   static WinEventProc wep; static TimerProc tp, bp;
   static IntPtr showHook; static uint hookPid; static UIntPtr burstId; static int burstLeft, hideWin, hideCnt;
 
@@ -917,7 +924,9 @@ public static class SH {
     string c = sb.ToString();
     if (c == \"Progman\" || c == \"WorkerW\" || c == \"Shell_TrayWnd\" || c == \"Shell_SecondaryTrayWnd\") return \"NONE\";
     uint pid; GetWindowThreadProcessId(h, out pid);
-    return pid == self ? \"SELF\" : \"OTHER\";
+    if (pid == self) return \"SELF\";
+    lastOther = h;                                         // para devolverle el foco al cerrar el panel superpuesto
+    return \"OTHER\";
   }
   // show=false oculta la barra (y las de los demas monitores); show=true la devuelve
   static void Tb(bool show) {
@@ -990,6 +999,7 @@ public static class SH {
         if (l == \"TB 1\") { tb = true; Tb(false); StartBurst(); }
         else if (l == \"TB 0\") { tb = false; Tb(true); }
         else if (l.StartsWith(\"FG \")) { long v; if (long.TryParse(l.Substring(3), out v)) Front(new IntPtr(v)); }
+        else if (l == \"BACKFG\") Front(lastOther);
         else if (l == \"QUIT\") break;
       }
     } catch {}
@@ -1041,6 +1051,7 @@ function startShell() {
       const l = shellBuf.slice(0, i).trim(); shellBuf = shellBuf.slice(i + 1);
       if (l === 'SELF' || l === 'OTHER' || l === 'NONE') onForeground(l);
       else if (l === 'PAD') padCombo();
+      else if (l === 'MUSIC') musicCombo();
       else if (l === 'PADWAKE') { if (win && !win.isDestroyed() && win.isVisible() && !hideT && !paused) holdFront(); }
     }
   });
@@ -1094,6 +1105,7 @@ function resumeLauncher(front) {
 }
 function onForeground(s) {
   clearTimeout(noneT); noneT = null;
+  if (overlayOn) return;                                                // el panel superpuesto maneja el foco por su cuenta
   if (!win || win.isDestroyed() || !win.isVisible() || hideT) return;   // el launcher está oculto a propósito: no se toca
   if (frontUntil > Date.now() && s !== 'SELF') return;                  // recién abierto: holdFront recupera el foco, no se pausa
   if (s === 'OTHER') pauseLauncher();
@@ -1109,7 +1121,49 @@ function padCombo() {
   padComboAt = now;
   toggle();
 }
-function toggle() {if (paused) showLauncher(); else win.isVisible() && !hideT ? hideLauncher() : showLauncher(); }
+// ---------- Panel de música superpuesto (Start + Select en cualquier mando) ----------
+// Con el launcher delante, abre o cierra el panel normal. Con otro programa delante (o el launcher oculto), la misma ventana
+// deja la pantalla completa y queda angosta a la izquierda, arriba de todo: solo el panel de música y la ayuda de abajo.
+// Al cerrarlo vuelve a la pantalla completa y el foco al programa de antes. Con juegos en pantalla completa exclusiva Windows no deja superponer nada.
+let overlayOn = false, overlayPrev = null, musicComboAt = 0;
+function musicCombo() {
+  const now = Date.now();
+  if (now - musicComboAt < 700 || !win || win.isDestroyed()) return;
+  musicComboAt = now;
+  if (overlayOn) closeOverlay();
+  else if (win.isVisible() && !hideT && !paused) win.webContents.send('music-toggle');
+  else openOverlay();
+}
+function openOverlay() {
+  overlayOn = true; overlayPrev = { visible: win.isVisible() && !hideT, paused };
+  clearTimeout(noneT); noneT = null; dropFront();
+  if (paused) { paused = false; lowPrio(false); }
+  win.webContents.send('overlay', true, false);
+  const d = screen.getDisplayMatching(win.getBounds()).bounds, k = d.height / 1080;
+  win.setFullScreen(false);
+  setTimeout(() => {
+    if (!overlayOn || win.isDestroyed()) return;
+    win.setBounds({ x: d.x, y: d.y, width: Math.round(570 * k), height: d.height });
+    win.setAlwaysOnTop(true, 'screen-saver'); win.show(); toFront();
+    if (musicView) musicView.setBounds(musicBounds());
+  }, 60);
+}
+function closeOverlay() {
+  if (!overlayOn) return;
+  overlayOn = false; musicKbOn = false;
+  const prev = overlayPrev || {}; overlayPrev = null;
+  win.setAlwaysOnTop(false);
+  win.webContents.send('overlay', false, !prev.visible);
+  if (!prev.visible) { win.hide(); return; }               // estaba en la bandeja: vuelve ahí (la pantalla completa se repone al abrirlo)
+  restoreFull();
+  if (prev.paused) shellSend('BACKFG');                    // el foco vuelve al juego; el launcher queda detrás, pausado
+}
+function restoreFull() {
+  if (!win || win.isDestroyed() || win.isFullScreen()) return;
+  win.setBounds(screen.getDisplayMatching(win.getBounds()).bounds); win.setFullScreen(true);
+}
+ipcMain.handle('overlayClose', () => closeOverlay());
+function toggle() { if (overlayOn) closeOverlay(); if (paused) showLauncher(); else win.isVisible() && !hideT ? hideLauncher() : showLauncher(); }
 function notifyLibrary() { if (win && !win.isDestroyed()) win.webContents.send('library'); }
 // Inicio con Windows. En la versión portable el .exe real es PORTABLE_EXECUTABLE_FILE (process.execPath apunta a una carpeta temporal).
 // "Minimizado" solo aplica al arranque de Windows: se pasa --hidden en el registro, un doble clic normal siempre abre el launcher.
@@ -1348,7 +1402,7 @@ const MUSIC_NAV = `window.__ps = window.__ps || (() => {
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;display:none;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 2px rgba(0,0,0,.45),0 0 16px rgba(255,255,255,.45);transition:left .12s,top .12s,width .12s,height .12s';
   document.documentElement.appendChild(box);
-  const SEL = 'a[href],button,input,textarea,select,[role=button],[role=tab],[role=link],[role=option],[role=checkbox],[tabindex="0"],tp-yt-paper-item,tp-yt-paper-icon-button,yt-icon-button';
+  const SEL = 'ytmusic-player-bar .content-info-wrapper,a[href],button,input,textarea,select,[role=button],[role=tab],[role=link],[role=option],[role=checkbox],[tabindex="0"],tp-yt-paper-item,tp-yt-paper-icon-button,yt-icon-button';
   let cur = null;
   // Solo lo que se ve de verdad: el centro dentro de la pantalla y sin nada encima (descarta lo oculto o tapado por el reproductor)
   const seen = e => {
@@ -1405,7 +1459,7 @@ const MUSIC_NAV = `window.__ps = window.__ps || (() => {
       if (best) mark(best); else place();
     },
     show() { if (live() && seen(cur)) place(); else first(); },
-    ok() { if (!live()) return null; if (field(cur)) { cur.focus(); return { field: true, value: cur.value, pass: cur.type === 'password' }; } cur.click(); return null; },
+    ok() { if (!live()) return null; if (field(cur)) { cur.focus(); return { field: true, value: cur.value, pass: cur.type === 'password' }; } const c = mid(cur); return { click: { x: Math.round(c.x), y: Math.round(c.y) } }; },
     active() { const e = document.activeElement; if (field(e)) { cur = e; place(); return { field: true, value: e.value, pass: e.type === 'password' }; } return null; },
     type(v) { if (field(cur)) setText(cur, v); },
     enter() { if (!field(cur)) return; for (const t of ['keydown', 'keypress', 'keyup']) cur.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true })); cur.form?.requestSubmit?.(); },
@@ -1413,11 +1467,15 @@ const MUSIC_NAV = `window.__ps = window.__ps || (() => {
   };
 })();`;
 const MUSIC_CMD = { move: 2, show: 0, ok: 0, active: 0, type: 1, enter: 0, play: 0, next: 0, prev: 0 };
-let musicView = null, musicOn = false;
-function musicBounds() {                                 // 570x1032 sobre 1920x1080, arriba a la izquierda
-  const [w, h] = win.getContentSize(), k = Math.min(w / 1920, h / 1080);
-  return { x: 0, y: 0, width: Math.round(570 * k), height: Math.round(1032 * k) };
+let musicView = null, musicOn = false, musicKbOn = false;
+// 570x1032 sobre 1920x1080, arriba a la izquierda. Superpuesto, la ventana ya mide eso de ancho; con el mini teclado abierto
+// (que ahí va debajo de la página) la página se acorta a 532 de alto
+function musicBounds() {
+  const [w, h] = win.getContentSize(), k = overlayOn ? h / 1080 : Math.min(w / 1920, h / 1080);
+  return { x: 0, y: 0, width: overlayOn ? w : Math.round(570 * k), height: Math.round((overlayOn && musicKbOn ? 532 : 1032) * k) };
 }
+// Clic de mouse "real" en la página (la de YouTube Music no responde a clics por código en el reproductor)
+function musicClick({ x, y }) { const wc = musicView.webContents; for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 }); }
 // Bloqueador de anuncios del panel (Ghostery, listas de uBlock/EasyList): uBlock Lite no sirve porque Electron no aplica declarativeNetRequest.
 // Las listas se bajan una vez por semana y quedan en un archivo. Si algo falla, el panel funciona igual sin bloquear.
 async function musicAdblock(ses) {
@@ -1471,8 +1529,25 @@ ipcMain.handle('musicBack', () => {
 ipcMain.handle('musicCmd', async (e, cmd, ...args) => {
   if (!musicView || !(cmd in MUSIC_CMD) || args.length > MUSIC_CMD[cmd]) return null;
   if (musicView.webContents.isLoading()) return null;      // cargando: no se encolan órdenes (la página nueva reubica el recuadro sola)
-  try { return await musicView.webContents.executeJavaScript(MUSIC_NAV + `window.__ps[${JSON.stringify(cmd)}](...${JSON.stringify(args)})`, true); } catch { return null; }
+  let r = null;
+  try { r = await musicView.webContents.executeJavaScript(MUSIC_NAV + `window.__ps[${JSON.stringify(cmd)}](...${JSON.stringify(args)})`, true); } catch { return null; }
+  if (r && r.click) { musicClick(r.click); return null; }   // "elegir": clic real en el centro de lo marcado
+  return r;
 });
+// Abre el reproductor grande (después de ir atrás queda solo la barra de abajo): clic real sobre la barra visible
+ipcMain.handle('musicExpand', async () => {
+  if (!musicView || musicView.webContents.isLoading()) return false;
+  const p = await musicView.webContents.executeJavaScript(`(() => {
+    const b = [...document.querySelectorAll('ytmusic-player-bar')].find(e => { const r = e.getBoundingClientRect(); return r.height > 20 && r.top > innerHeight / 2; });
+    const e = b && (b.querySelector('.content-info-wrapper') || b); if (!e) return null;
+    const r = e.getBoundingClientRect(), br = b.getBoundingClientRect();
+    return { x: Math.round(r.left + Math.min(r.width / 2, 80)), y: Math.round(br.top + br.height / 2) };
+  })()`, true).catch(() => null);
+  if (!p) return false;
+  musicClick(p);
+  return true;
+});
+ipcMain.handle('musicKb', (e, on) => { musicKbOn = !!on && overlayOn; if (musicView) musicView.setBounds(musicBounds()); });
 ipcMain.handle('musicSearch', (e, q) => { if (musicView) musicView.webContents.loadURL(MUSIC_URL + 'search?q=' + encodeURIComponent(String(q).slice(0, 200))); });
 
 // Avisos cortos para la interfaz (se muestran como toast)
