@@ -1386,6 +1386,20 @@ function musicBounds() {                                 // 570x1032 sobre 1920x
   const [w, h] = win.getContentSize(), k = Math.min(w / 1920, h / 1080);
   return { x: 0, y: 0, width: Math.round(570 * k), height: Math.round(1032 * k) };
 }
+// Bloqueador de anuncios del panel (Ghostery, listas de uBlock/EasyList): uBlock Lite no sirve porque Electron no aplica declarativeNetRequest.
+// Las listas se bajan una vez por semana y quedan en un archivo. Si algo falla, el panel funciona igual sin bloquear.
+async function musicAdblock(ses) {
+  try {
+    const { ElectronBlocker } = require('@ghostery/adblocker-electron');
+    // registerPreloadScript recién existe en Electron 35; en la 33 hace lo mismo setPreloads
+    if (!ses.registerPreloadScript) ses.registerPreloadScript = ({ filePath }) => { ses.setPreloads([...ses.getPreloads(), filePath]); return filePath; };
+    const cache = path.join(userDir(), 'adblock.bin');
+    try { if (Date.now() - fs.statSync(cache).mtimeMs > 7 * 864e5) fs.unlinkSync(cache); } catch {}
+    const blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, { path: cache, read: fs.promises.readFile, write: fs.promises.writeFile });
+    blocker.enableBlockingInSession(ses);
+    return blocker;
+  } catch { return null; }
+}
 function musicCreate() {
   musicView = new WebContentsView({ webPreferences: { partition: 'persist:music', sandbox: true, contextIsolation: true, backgroundThrottling: false } });
   const wc = musicView.webContents;
@@ -1394,11 +1408,13 @@ function musicCreate() {
   wc.setWindowOpenHandler(({ url }) => { if (MUSIC_OK.test(url)) wc.loadURL(url); return { action: 'deny' }; });
   wc.on('did-finish-load', () => { wc.insertCSS('::-webkit-scrollbar{display:none!important}html,body{scrollbar-width:none!important}').catch(() => {}); });
   wc.on('will-navigate', (e, url) => { if (!MUSIC_OK.test(url)) e.preventDefault(); });
+  wc.on('will-prevent-unload', e => e.preventDefault());   // con música sonando la página pide confirmar la salida: no hay quien responda
   wc.on('focus', () => { if (musicOn) setTimeout(() => { if (musicOn && win && !win.isDestroyed()) win.webContents.focus(); }, 0); });   // un clic en la página no le quita el mando al launcher
   wc.on('render-process-gone', () => { win?.contentView.removeChildView(musicView); musicView = null; musicOn = false; if (win && !win.isDestroyed()) win.webContents.send('music-gone'); });
   win.contentView.addChildView(musicView);
   win.on('resize', () => { if (musicView) musicView.setBounds(musicBounds()); });
-  wc.loadURL(MUSIC_URL);
+  // Con las listas ya guardadas tarda poco; la primera vez se espera como mucho 6 s y si no, carga igual
+  Promise.race([musicAdblock(wc.session), new Promise(r => setTimeout(r, 6000))]).then(() => { if (!wc.isDestroyed()) wc.loadURL(MUSIC_URL); });
 }
 ipcMain.handle('musicShow', (e, on) => {
   musicOn = !!on;

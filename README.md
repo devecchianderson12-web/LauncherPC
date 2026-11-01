@@ -86,6 +86,7 @@ al moverte, vuelve el fondo de cintas. (Su difuminado es fijo; el ajuste de difu
 
 ## Música (baldosa ♪ / tecla M)
 YouTube Music en un panel con bordes redondeados a la izquierda, dentro del launcher, sin barra de título. Con el mando: cruceta mueve el marco, aceptar elige, X·□ abre el mini teclado, △·Y pausa, L1/R1 anterior/siguiente, atrás cierra (**la música sigue**). Teclado: flechas, Enter, K, Espacio, Q/E, Esc.
+Incluye un bloqueador de anuncios (Ghostery, con listas tipo uBlock) solo para este panel; algunos anuncios pueden pasar.
 
 ## Explorador propio (portadas, añadir juegos, carpetas, video)
 El launcher **nunca abre el explorador de Windows**: portada (C / △ / Y), añadir juego o acceso directo (.exe, .lnk, .url, .bat, con su icono y el menú Inicio como lugar), carpeta de juegos ("Usar esta carpeta") y video de fondo usan el mismo. Se abre un explorador **a pantalla completa con cuadros grandes** (miniatura de cada imagen), pensado para verse de lejos.
