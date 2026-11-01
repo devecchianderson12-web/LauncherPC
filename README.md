@@ -85,7 +85,7 @@ Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece d
 al moverte, vuelve el fondo de cintas. (Su difuminado es fijo; el ajuste de difuminado ahora es del fondo animado, ver abajo.)
 
 ## Música (baldosa ♪ / tecla M)
-YouTube Music en un panel con bordes redondeados a la izquierda, dentro del launcher, sin barra de título. Con el mando: cruceta mueve el marco, aceptar elige, X·□ abre el mini teclado, △·Y pausa, L1/R1 anterior/siguiente, atrás cierra (**la música sigue**). Teclado: flechas, Enter, K, Espacio, Q/E, Esc.
+YouTube Music en un panel con bordes redondeados a la izquierda, dentro del launcher, sin barra de título. Un recuadro blanco redondeado marca lo elegido (solo cosas visibles; los carruseles y la página se desplazan solos). Con el mando: cruceta mueve, aceptar elige (en un campo abre el mini teclado), **atrás vuelve a la página anterior como un navegador** (minimiza el reproductor, sale de Google; sin nada atrás, cierra), LT·L2 cierra (**la música sigue**), X·□ mini teclado, △·Y pausa, L1/R1 anterior/siguiente. Teclado: flechas, Enter, Retroceso (atrás), Esc (cerrar), K, Espacio, Q/E.
 Incluye un bloqueador de anuncios (Ghostery, con listas tipo uBlock) solo para este panel; algunos anuncios pueden pasar.
 
 ## Explorador propio (portadas, añadir juegos, carpetas, video)

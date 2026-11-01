@@ -1340,19 +1340,53 @@ ipcMain.handle('pickApply', (e, id, file) => {
 // ---------- Música: YouTube Music en un panel dentro del launcher ----------
 // Es una vista web pegada a la ventana (sin barra de título, con bordes redondeados), con su propia sesión guardada en disco.
 // El foco queda siempre en el launcher: el mando se lee ahí y se manda a la página con MUSIC_NAV, que mueve un marco
-// entre los elementos que se pueden pulsar. Cerrar el panel solo lo oculta: la música sigue sonando.
+// entre los elementos visibles. Atrás (B) va hacia atrás como un navegador; cerrar el panel solo lo oculta: la música sigue sonando.
 const MUSIC_URL = 'https://music.youtube.com/';
 const MUSIC_OK = /^https:\/\/([a-z0-9-]+\.)*(youtube\.com|google\.com|google\.[a-z.]+|gstatic\.com)(\/|$)/i;
 const MUSIC_NAV = `window.__ps = window.__ps || (() => {
-  const st = document.createElement('style');
-  st.textContent = '.__psf{outline:3px solid #fff!important;outline-offset:2px!important}html,body{scrollbar-width:none}';
-  document.documentElement.appendChild(st);
-  const SEL = 'a[href],button,input,textarea,[role=button],[role=tab],tp-yt-paper-item,tp-yt-paper-icon-button,yt-icon-button';
+  // Recuadro blanco redondeado que flota sobre lo elegido (no depende del estilo de la página) y lo sigue al hacer scroll
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;display:none;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 2px rgba(0,0,0,.45),0 0 16px rgba(255,255,255,.45);transition:left .12s,top .12s,width .12s,height .12s';
+  document.documentElement.appendChild(box);
+  const SEL = 'a[href],button,input,textarea,select,[role=button],[role=tab],[role=link],[role=option],[role=checkbox],[tabindex="0"],tp-yt-paper-item,tp-yt-paper-icon-button,yt-icon-button';
   let cur = null;
-  const list = () => [...document.querySelectorAll(SEL)].filter(e => { const r = e.getBoundingClientRect(); return r.width > 8 && r.height > 8 && !e.parentElement.closest(SEL) && getComputedStyle(e).visibility !== 'hidden'; });
+  // Solo lo que se ve de verdad: el centro dentro de la pantalla y sin nada encima (descarta lo oculto o tapado por el reproductor)
+  const seen = e => {
+    const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8) return false;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+    const h = document.elementFromPoint(x, y);
+    return !!h && (e === h || e.contains(h) || h.contains(e) || !!e.parentElement?.contains(h));
+  };
+  const list = () => [...document.querySelectorAll(SEL)].filter(e => !e.parentElement?.closest(SEL) && seen(e));
   const mid = e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
-  const mark = e => { cur?.classList.remove('__psf'); cur = e; e.classList.add('__psf'); e.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' }); };
   const live = () => cur && cur.isConnected && cur.getBoundingClientRect().width > 0;
+  const place = () => {
+    if (!live()) { box.style.display = 'none'; return; }
+    const r = cur.getBoundingClientRect();
+    Object.assign(box.style, { display: 'block', left: (r.left - 4) + 'px', top: (r.top - 4) + 'px', width: (r.width + 2) + 'px', height: (r.height + 2) + 'px' });
+  };
+  addEventListener('scroll', place, true); addEventListener('resize', place); setInterval(place, 400);
+  const mark = e => { cur = e; e.scrollIntoView({ block: 'nearest', inline: 'nearest' }); place(); };
+  const first = () => { const l = list().sort((a, b) => mid(a).y - mid(b).y || mid(a).x - mid(b).x); if (l[0]) mark(l[0]); else place(); };
+  const pick = (dx, dy) => {
+    const a = mid(cur); let best = null, bs = 1e9;
+    for (const e of list()) {
+      if (e === cur) continue;
+      const b = mid(e), d = dx ? (b.x - a.x) * dx : (b.y - a.y) * dy, o = dx ? Math.abs(b.y - a.y) : Math.abs(b.x - a.x);
+      if (d < 6) continue;
+      const s = d + o * 3; if (s < bs) { bs = s; best = e; }
+    }
+    return best;
+  };
+  // Lo que se puede desplazar alrededor de lo elegido (carruseles hacia los costados, listas hacia abajo)
+  const scroller = (e, ax) => {
+    for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) {
+      const s = getComputedStyle(p), o = ax === 'x' ? s.overflowX : s.overflowY;
+      if (/(auto|scroll)/.test(o) && (ax === 'x' ? p.scrollWidth > p.clientWidth + 4 : p.scrollHeight > p.clientHeight + 4)) return p;
+    }
+    return ax === 'x' ? null : document.scrollingElement;
+  };
   const field = e => e && e.matches('input,textarea') && !/^(checkbox|radio|hidden|submit|button)$/i.test(e.type);
   const setText = (e, v) => {
     const p = e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -1362,25 +1396,23 @@ const MUSIC_NAV = `window.__ps = window.__ps || (() => {
   const hit = q => document.querySelector(q)?.click();
   return {
     move(dx, dy) {
-      const all = list();
-      if (!live()) { const v = all.find(e => { const r = e.getBoundingClientRect(); return r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight; }); if (v) mark(v); return; }
-      const a = mid(cur); let best = null, bs = 1e9;
-      for (const e of all) {
-        if (e === cur) continue;
-        const b = mid(e), d = dx ? (b.x - a.x) * dx : (b.y - a.y) * dy, o = dx ? Math.abs(b.y - a.y) : Math.abs(b.x - a.x);
-        if (d < 6) continue;
-        const s = d + o * 3; if (s < bs) { bs = s; best = e; }
+      if (!live() || !seen(cur)) { first(); return; }
+      let best = pick(dx, dy);
+      if (!best) {                                      // nada más en esa dirección: se desplaza la página o el carrusel y se busca de nuevo
+        const sc = scroller(cur, dx ? 'x' : 'y');
+        if (sc) { sc.scrollBy(dx ? { left: dx * sc.clientWidth * .7, behavior: 'instant' } : { top: dy * innerHeight * .5, behavior: 'instant' }); best = pick(dx, dy); }
       }
-      if (best) mark(best); else if (dy) scrollBy({ top: dy * innerHeight * .6, behavior: 'smooth' });
+      if (best) mark(best); else place();
     },
+    show() { if (live() && seen(cur)) place(); else first(); },
     ok() { if (!live()) return null; if (field(cur)) { cur.focus(); return { field: true, value: cur.value, pass: cur.type === 'password' }; } cur.click(); return null; },
-    active() { const e = document.activeElement; if (field(e)) { cur = e; return { field: true, value: e.value, pass: e.type === 'password' }; } return null; },
+    active() { const e = document.activeElement; if (field(e)) { cur = e; place(); return { field: true, value: e.value, pass: e.type === 'password' }; } return null; },
     type(v) { if (field(cur)) setText(cur, v); },
-    enter() { if (!field(cur)) return; for (const t of ['keydown', 'keyup']) cur.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true })); cur.form?.requestSubmit?.(); },
+    enter() { if (!field(cur)) return; for (const t of ['keydown', 'keypress', 'keyup']) cur.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true })); cur.form?.requestSubmit?.(); },
     play() { hit('#play-pause-button'); }, next() { hit('.next-button'); }, prev() { hit('.previous-button'); }
   };
 })();`;
-const MUSIC_CMD = { move: 2, ok: 0, active: 0, type: 1, enter: 0, play: 0, next: 0, prev: 0 };
+const MUSIC_CMD = { move: 2, show: 0, ok: 0, active: 0, type: 1, enter: 0, play: 0, next: 0, prev: 0 };
 let musicView = null, musicOn = false;
 function musicBounds() {                                 // 570x1032 sobre 1920x1080, arriba a la izquierda
   const [w, h] = win.getContentSize(), k = Math.min(w / 1920, h / 1080);
@@ -1406,7 +1438,10 @@ function musicCreate() {
   musicView.setBackgroundColor('#000000');
   musicView.setBorderRadius?.(Math.round(24 * musicBounds().height / 1032));
   wc.setWindowOpenHandler(({ url }) => { if (MUSIC_OK.test(url)) wc.loadURL(url); return { action: 'deny' }; });
-  wc.on('did-finish-load', () => { wc.insertCSS('::-webkit-scrollbar{display:none!important}html,body{scrollbar-width:none!important}').catch(() => {}); });
+  // El recuadro aparece solo en cada página nueva (también al abrir el reproductor, que cambia la dirección sin recargar)
+  const reshow = () => setTimeout(() => { if (musicOn && !wc.isDestroyed() && !wc.isLoading()) wc.executeJavaScript(MUSIC_NAV + 'window.__ps.show()', true).catch(() => {}); }, 700);
+  wc.on('did-finish-load', () => { wc.insertCSS('*{scrollbar-width:none!important}::-webkit-scrollbar{display:none!important}').catch(() => {}); reshow(); });
+  wc.on('did-navigate-in-page', reshow);
   wc.on('will-navigate', (e, url) => { if (!MUSIC_OK.test(url)) e.preventDefault(); });
   wc.on('will-prevent-unload', e => e.preventDefault());   // con música sonando la página pide confirmar la salida: no hay quien responda
   wc.on('focus', () => { if (musicOn) setTimeout(() => { if (musicOn && win && !win.isDestroyed()) win.webContents.focus(); }, 0); });   // un clic en la página no le quita el mando al launcher
@@ -1419,11 +1454,23 @@ function musicCreate() {
 ipcMain.handle('musicShow', (e, on) => {
   musicOn = !!on;
   if (on && !musicView) musicCreate();
-  if (musicView) { musicView.setBounds(musicBounds()); musicView.setVisible(musicOn); }
+  if (musicView) {
+    musicView.setBounds(musicBounds()); musicView.setVisible(musicOn);
+    if (musicOn && !musicView.webContents.isLoading()) musicView.webContents.executeJavaScript(MUSIC_NAV + 'window.__ps.show()', true).catch(() => {});
+  }
   win.webContents.focus();
+});
+// Atrás como en un navegador (minimiza el reproductor, sale de Google…); false = no hay a dónde volver
+ipcMain.handle('musicBack', () => {
+  if (!musicView) return false;
+  const wc = musicView.webContents, h = wc.navigationHistory;
+  if (!(h ? h.canGoBack() : wc.canGoBack())) return false;
+  h ? h.goBack() : wc.goBack();
+  return true;
 });
 ipcMain.handle('musicCmd', async (e, cmd, ...args) => {
   if (!musicView || !(cmd in MUSIC_CMD) || args.length > MUSIC_CMD[cmd]) return null;
+  if (musicView.webContents.isLoading()) return null;      // cargando: no se encolan órdenes (la página nueva reubica el recuadro sola)
   try { return await musicView.webContents.executeJavaScript(MUSIC_NAV + `window.__ps[${JSON.stringify(cmd)}](...${JSON.stringify(args)})`, true); } catch { return null; }
 });
 ipcMain.handle('musicSearch', (e, q) => { if (musicView) musicView.webContents.loadURL(MUSIC_URL + 'search?q=' + encodeURIComponent(String(q).slice(0, 200))); });

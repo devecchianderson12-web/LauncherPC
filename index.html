@@ -1372,13 +1372,14 @@ function musicClose() {
 }
 function muHint() {
   if (!muOn()) return;
-  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Esc', remove: 'K', cover: 'Espacio', scan: 'Q', layout: 'E' };
-  const on = mkOn(), parts = on ? [[L.ok, 'pulsar tecla'], [L.back, 'cerrar teclado']]
-    : [[L.ok, 'elegir'], [L.remove, 'teclado'], [L.cover, 'pausa'], [L.scan, 'anterior'], [L.layout, 'siguiente'], [L.back, 'cerrar (la música sigue)']];
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { ok: 'Enter', back: 'Retroceso', remove: 'K', cover: 'Espacio', scan: 'Q', layout: 'E', upgrade: 'Esc' };
+  const on = mkOn(), parts = on ? [[L.ok, 'pulsar tecla'], [gp ? L.back : 'Esc', 'cerrar teclado']]
+    : [[L.ok, 'elegir'], [L.back, 'atrás'], [L.remove, 'teclado'], [L.cover, 'pausa'], [L.scan, 'anterior'], [L.layout, 'siguiente'], [L.upgrade, 'cerrar (la música sigue)']];
   $('#mu-hint').innerHTML = parts.map(([b, t]) => `<span class="hk">${glyph(b, k)}${t}</span>`).join('');
 }
 const musicCmd = (c, ...a) => window.api.musicCmd(c, ...a);
-async function musicOk() { const r = await musicCmd('ok'); if (r?.field) mkOpen(r); }
+async function musicOk() { const r = await musicCmd('ok'); if (r?.field) mkOpen(r); else setTimeout(() => musicCmd('show'), 800); }   // si lo pulsado cambió la página, el recuadro se reubica
+async function musicBack() { if (await window.api.musicBack()) setTimeout(() => musicCmd('show'), 800); else musicClose(); }   // sin páginas atrás, cierra
 async function musicKeys() { mkOpen(await musicCmd('active')); }
 function mkOpen(f) {
   mk = { r: 1, c: 0, text: f?.value || '', up: false, field: !!f?.field, pass: !!f?.pass };
@@ -1425,6 +1426,7 @@ function musicKey(e) {                                       // teclado físico 
     return;
   }
   if (k === 'Escape' || k.toLowerCase() === 'm') musicClose();
+  else if (k === 'Backspace') musicBack();
   else if (k.startsWith('Arrow')) musicCmd('move', k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0);
   else if (k === 'Enter') musicOk();
   else if (k === ' ') musicCmd('play');
@@ -2078,7 +2080,7 @@ function poll() {
       repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => mkMove(d, 0));
       repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => mkMove(0, d));
     } else {
-      edge('ok', on('ok'), musicOk); edge('back', on('back'), musicClose); edge('remove', on('remove'), musicKeys); edge('cover', on('cover'), () => musicCmd('play'));
+      edge('ok', on('ok'), musicOk); edge('back', on('back'), musicBack); edge('upgrade', on('upgrade'), sh(musicClose)); edge('remove', on('remove'), musicKeys); edge('cover', on('cover'), () => musicCmd('play'));
       edge('scan', on('scan'), sh(() => musicCmd('prev'))); edge('layout', on('layout'), sh(() => musicCmd('next')));
       repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => musicCmd('move', d, 0));
       repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => musicCmd('move', 0, d));
