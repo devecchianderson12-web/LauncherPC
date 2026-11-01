@@ -1383,7 +1383,11 @@ function musicClose(quiet) {
   mkClose(); muEl.classList.remove('open'); window.api.musicShow(false); armArt();
   if (!quiet && document.body.classList.contains('overlay')) window.api.overlayClose();
 }
-async function musicExpand() { if (await window.api.musicExpand()) setTimeout(() => musicCmd('show'), 900); }
+async function musicExpand() {
+  const r = await window.api.musicExpand();
+  if (r === 'none') toast('No hay ninguna canción sonando');
+  else if (r) setTimeout(() => musicCmd('show'), 600);
+}
 // Start + Select (lo lee main.js): con el launcher delante abre o cierra el panel; con otra app delante la ventana pasa a modo superpuesto
 window.api.onMusicToggle(() => { if (muOn()) musicClose(); else if (!settingsOpen() && !pickerOpen()) musicOpen(); });
 window.api.onOverlay((on, hidden) => {

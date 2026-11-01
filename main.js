@@ -1534,18 +1534,31 @@ ipcMain.handle('musicCmd', async (e, cmd, ...args) => {
   if (r && r.click) { musicClick(r.click); return null; }   // "elegir": clic real en el centro de lo marcado
   return r;
 });
-// Abre el reproductor grande (después de ir atrás queda solo la barra de abajo): clic real sobre la barra visible
+// Abre el reproductor grande (después de ir atrás queda solo la barra de abajo): clic real en la miniatura de la portada,
+// a la izquierda del título (es el reproductor achicado). Si no se abrió, segundo intento sobre el título.
+const MUSIC_BAR = `(() => {
+  const b = [...document.querySelectorAll('ytmusic-player-bar')].find(e => { const r = e.getBoundingClientRect(); return r.height > 20 && r.top > innerHeight / 2; });
+  if (!b) return null;
+  const br = b.getBoundingClientRect(), y = Math.round(br.top + br.height / 2), w = b.querySelector('.content-info-wrapper')?.getBoundingClientRect();
+  const thumb = [...document.querySelectorAll('ytmusic-player yt-img-shadow, ytmusic-player-bar yt-img-shadow, ytmusic-player-bar img')]
+    .map(e => e.getBoundingClientRect()).find(r => r.width > 16 && r.top >= br.top - 4 && r.bottom <= br.bottom + 4);
+  return {
+    open: document.querySelector('ytmusic-app-layout')?.getAttribute('player-ui-state') === 'PLAYER_PAGE_OPEN',
+    thumb: thumb ? { x: Math.round(thumb.left + thumb.width / 2), y: Math.round(thumb.top + thumb.height / 2) } : { x: Math.round(br.left + 40), y },
+    title: w ? { x: Math.round(w.left + Math.min(w.width / 2, 80)), y } : null
+  };
+})()`;
+const musicOpenState = () => musicView.webContents.executeJavaScript("document.querySelector('ytmusic-app-layout')?.getAttribute('player-ui-state') === 'PLAYER_PAGE_OPEN'", true).catch(() => false);
 ipcMain.handle('musicExpand', async () => {
   if (!musicView || musicView.webContents.isLoading()) return false;
-  const p = await musicView.webContents.executeJavaScript(`(() => {
-    const b = [...document.querySelectorAll('ytmusic-player-bar')].find(e => { const r = e.getBoundingClientRect(); return r.height > 20 && r.top > innerHeight / 2; });
-    const e = b && (b.querySelector('.content-info-wrapper') || b); if (!e) return null;
-    const r = e.getBoundingClientRect(), br = b.getBoundingClientRect();
-    return { x: Math.round(r.left + Math.min(r.width / 2, 80)), y: Math.round(br.top + br.height / 2) };
-  })()`, true).catch(() => null);
-  if (!p) return false;
-  musicClick(p);
-  return true;
+  const p = await musicView.webContents.executeJavaScript(MUSIC_BAR, true).catch(() => null);
+  if (!p) return 'none';                                    // no hay nada sonando: no hay barra
+  if (p.open) return true;
+  musicClick(p.thumb);
+  await new Promise(r => setTimeout(r, 900));
+  if (!musicView || await musicOpenState()) return true;
+  if (p.title) { musicClick(p.title); await new Promise(r => setTimeout(r, 900)); }
+  return !!musicView && await musicOpenState();
 });
 ipcMain.handle('musicKb', (e, on) => { musicKbOn = !!on && overlayOn; if (musicView) musicView.setBounds(musicBounds()); });
 ipcMain.handle('musicSearch', (e, q) => { if (musicView) musicView.webContents.loadURL(MUSIC_URL + 'search?q=' + encodeURIComponent(String(q).slice(0, 200))); });
