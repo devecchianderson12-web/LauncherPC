@@ -11,7 +11,8 @@ y permite añadir cualquier .exe con portada automática.
   Dentro de **Ajustes** también se maneja con el mando (cruceta para moverte, aceptar pulsa, atrás cierra).
   Los mandos DirectInput genéricos (o PlayStation/8BitDo en modo D) también vienen predefinidos (□ ✕ ○ △ L1 R1 L2 R2, cruceta en el eje 9)
   y la ayuda muestra el nombre real de cada botón. (Desde 1.22.0 ya no existe "Configurar botones".)
-  Al abrir el launcher se trae la ventana al frente con foco de verdad, así **el mando funciona enseguida** sin hacer clic antes.
+  Al abrir, el launcher se queda arriba de todo unos segundos y recupera el foco si lo pierde, así **queda esperando órdenes enseguida**, como un juego.
+  Si después el escritorio toma el foco, cualquier botón del mando lo devuelve al launcher (con un juego delante no hace nada).
 - **L1 + R1 + L2 + R2 a la vez** (LB RB LT RT en Xbox, L R ZL ZR en Nintendo): abre/oculta el launcher como Ctrl+Alt+P, **también con un juego delante**.
   Lo lee el ayudante de Windows (XInput + winmm); cada 3 s busca mandos y solo lee mientras haya alguno conectado.
   Con el launcher delante, L1/R1/L2 esperan 180 ms antes de actuar para no disparar sus acciones al hacer la combinación.
@@ -83,9 +84,9 @@ la optimización de gráficos y también si el launcher se cierra a la fuerza (e
 Si un juego o aplicación queda seleccionado **1 segundo**, su portada aparece difuminada de fondo (con fundido suave);
 al moverte, vuelve el fondo de cintas. (Su difuminado es fijo; el ajuste de difuminado ahora es del fondo animado, ver abajo.)
 
-## Cambiar portada: explorador propio (C / △ / Y)
-En vez del diálogo chico de Windows se abre un explorador **a pantalla completa con cuadros grandes** (miniatura de cada imagen), pensado para verse de lejos.
-- Arriba, lugares rápidos: **Carpeta del juego**, Imágenes, Descargas, Escritorio, Documentos, los discos y **Explorador de Windows…** (el diálogo clásico, por si hace falta).
+## Explorador propio (portadas, añadir juegos, carpetas, video)
+El launcher **nunca abre el explorador de Windows**: portada (C / △ / Y), añadir juego o acceso directo (.exe, .lnk, .url, .bat, con su icono y el menú Inicio como lugar), carpeta de juegos ("Usar esta carpeta") y video de fondo usan el mismo. Se abre un explorador **a pantalla completa con cuadros grandes** (miniatura de cada imagen), pensado para verse de lejos.
+- Arriba, lugares rápidos: **Carpeta del juego**, Imágenes, Descargas, Escritorio, Documentos y los discos.
   Abre en la última carpeta usada.
 - **Teclado**: flechas, Enter elige/abre, Retroceso sube de carpeta, Esc cierra, RePág/AvPág, Inicio/Fin.
 - **Mouse**: clic elige/abre, rueda para desplazarse, clic derecho = atrás.
@@ -114,7 +115,7 @@ En vez del diálogo chico de Windows se abre un explorador **a pantalla completa
   animado (clásico y PS3). Si con 100 % se traba, se baja con − / + (de a 10). La tecla F muestra la resolución y la nitidez.
 - **Subir video**: elegís un video (mp4, webm, mkv, mov, m4v); se copia a la carpeta de datos (`bgvideo\`, solo se guarda el último)
   y se reproduce sin sonido y en bucle. Se pausa con la portada de fondo, esperando un juego, con el launcher oculto o pausado.
-  Si cancelás el diálogo se vuelve al último video subido. Si el formato no se puede reproducir, vuelve al fondo clásico.
+  Si cerrás el explorador se vuelve al último video subido. Si el formato no se puede reproducir, vuelve al fondo clásico.
 - Con **Fondo animado: No** siempre se ve un color liso, elijas el tipo que elijas.
 
 ## Botones de la ayuda (Ajustes > Botones de la ayuda)

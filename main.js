@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, shell, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, shell, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -756,13 +756,30 @@ function toFront() {
   };
   go(); setTimeout(go, 300);
 }
+// Al abrir, el launcher se queda arriba de todo un momento y recupera el foco si lo pierde (por ejemplo, un clic en el escritorio
+// mientras arrancaba): así queda esperando órdenes enseguida, como un juego. Lanzar un juego u ocultarlo lo corta (dropFront).
+let frontUntil = 0, frontT = null, firstShow = true;
+function holdFront() {
+  frontUntil = Date.now() + (firstShow ? 6000 : 2500); firstShow = false;
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true);
+  clearInterval(frontT);
+  frontT = setInterval(() => {
+    if (!win || win.isDestroyed() || !win.isVisible() || Date.now() > frontUntil) dropFront();
+    else if (!win.isFocused()) toFront();
+  }, 400);
+}
+function dropFront() {
+  frontUntil = 0; clearInterval(frontT); frontT = null;
+  if (win && !win.isDestroyed()) win.setAlwaysOnTop(false);
+}
 // Al ocultar se espera ~190 ms para que la interfaz haga su animación de salida antes de esconder la ventana
 let hideT = null;
 function showLauncher() {
   if (!win) return;
   clearTimeout(hideT); hideT = null;
-  if (paused) { resumeLauncher(true); return; }     // ya estaba visible detrás de otro programa: solo estaba congelado
-  win.show(); toFront();
+  if (paused) { resumeLauncher(true); holdFront(); return; }     // ya estaba visible detrás de otro programa: solo estaba congelado
+  win.show(); toFront(); holdFront();
   win.webContents.send('enter');
   startStats();
   syncTaskbar();
@@ -770,6 +787,7 @@ function showLauncher() {
 function hideLauncher() {
   if (!win || !win.isVisible() || hideT) return;
   if (paused) resumeLauncher(false);
+  dropFront();
   stopStats(); clearTimeout(launchT); launchT = null;
   win.webContents.send('leave');
   hideT = setTimeout(() => { hideT = null; if (win && !win.isDestroyed()) win.hide(); }, 190);
@@ -844,14 +862,19 @@ public static class SH {
   [DllImport(\"winmm.dll\")] static extern uint joyGetDevCapsW(UIntPtr id, byte[] caps, uint size);
   static TimerProc padScanTp, padPollTp;
   static bool[] xOn = new bool[4]; static System.Collections.Generic.List<uint> joys = new System.Collections.Generic.List<uint>();
-  static UIntPtr padPollId; static bool comboDown, xinputOk = true;
+  static UIntPtr padPollId; static bool comboDown, anyBtn, anyDown, xinputOk = true;
 
   static JOYEX NewJoy() { JOYEX j = new JOYEX(); j.size = (uint)Marshal.SizeOf(typeof(JOYEX)); j.flags = 0x80; return j; }   // JOY_RETURNBUTTONS
   static bool XCombo(uint i) {
     XST s; if (XInputGetState(i, out s) != 0) { xOn[i] = false; return false; }
+    if (s.pad.buttons != 0 || s.pad.lt > 100 || s.pad.rt > 100) anyBtn = true;
     return (s.pad.buttons & 0x0300) == 0x0300 && s.pad.lt > 100 && s.pad.rt > 100;     // LB + RB + LT + RT
   }
-  static bool JCombo(uint id) { JOYEX j = NewJoy(); return joyGetPosEx(id, ref j) == 0 && (j.buttons & 0xF0) == 0xF0; }
+  static bool JCombo(uint id) {
+    JOYEX j = NewJoy(); if (joyGetPosEx(id, ref j) != 0) return false;
+    if (j.buttons != 0) anyBtn = true;
+    return (j.buttons & 0xF0) == 0xF0;
+  }
   static void PadScan(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
     if (xinputOk) {
       try { for (uint i = 0; i < 4; i++) { XST s; xOn[i] = XInputGetState(i, out s) == 0; } }
@@ -872,13 +895,16 @@ public static class SH {
     else if (!any && padPollId != UIntPtr.Zero) { KillTimer(IntPtr.Zero, padPollId); padPollId = UIntPtr.Zero; comboDown = false; }
   }
   static void PadPoll(IntPtr hwnd, uint msg, UIntPtr id, uint time) {
-    bool c = false;
+    bool c = false; anyBtn = false;
     try {
       if (xinputOk) for (uint i = 0; i < 4; i++) if (xOn[i] && XCombo(i)) c = true;
       foreach (uint j in joys) if (JCombo(j)) c = true;
     } catch {}
     if (c && !comboDown) { Console.WriteLine(\"PAD\"); Console.Out.Flush(); }   // una vez por pulsacion: hay que soltar para repetir
     comboDown = c;
+    // Boton del mando con el escritorio delante (nadie tiene el foco): el launcher visible vuelve a tomarlo. Con un juego delante no se toca nada.
+    if (anyBtn && !anyDown && last == \"NONE\") { Console.WriteLine(\"PADWAKE\"); Console.Out.Flush(); }
+    anyDown = anyBtn;
   }
 
   static uint self; static string last = \"\"; static volatile bool tb;
@@ -1015,6 +1041,7 @@ function startShell() {
       const l = shellBuf.slice(0, i).trim(); shellBuf = shellBuf.slice(i + 1);
       if (l === 'SELF' || l === 'OTHER' || l === 'NONE') onForeground(l);
       else if (l === 'PAD') padCombo();
+      else if (l === 'PADWAKE') { if (win && !win.isDestroyed() && win.isVisible() && !hideT && !paused) holdFront(); }
     }
   });
   shellSend('TB ' + (tbWanted ? 1 : 0));
@@ -1068,6 +1095,7 @@ function resumeLauncher(front) {
 function onForeground(s) {
   clearTimeout(noneT); noneT = null;
   if (!win || win.isDestroyed() || !win.isVisible() || hideT) return;   // el launcher está oculto a propósito: no se toca
+  if (frontUntil > Date.now() && s !== 'SELF') return;                  // recién abierto: holdFront recupera el foco, no se pausa
   if (s === 'OTHER') pauseLauncher();
   else if (s === 'SELF') resumeLauncher(false);
   // NONE: nadie tiene el foco (se acaba de cerrar el programa). Se espera 0,4 s por si Windows activa otra ventana; si no, el launcher pasa al frente
@@ -1107,9 +1135,11 @@ ipcMain.handle('rescan', async () => {
 ipcMain.handle('cover', (e, item) => cachedCover(item));
 
 ipcMain.handle('launch', (e, item) => {
+  dropFront();
   cfg.recent[item.id] = Date.now();
   saveCfg();
   if (item.type === 'steam') shell.openExternal('steam://rungameid/' + item.appid);
+  else if (item.exe && !/\.exe$/i.test(item.exe)) shell.openPath(item.exe);           // .lnk, .url, .bat: los abre Windows
   else if (item.exe) spawn(item.exe, [], { detached: true, stdio: 'ignore', cwd: path.dirname(item.exe) }).unref();
   // El launcher sigue visible ("Iniciando…") hasta que otro programa pasa al primer plano: entonces se pausa solo.
   // Si en 2 min no aparece nada, la interfaz vuelve a la normalidad. Sin ayudante (no Windows / PowerShell bloqueado) se oculta como antes.
@@ -1119,14 +1149,13 @@ ipcMain.handle('launch', (e, item) => {
 });
 ipcMain.handle('cancelLaunch', () => { clearTimeout(launchT); launchT = null; });
 
-ipcMain.handle('add', async () => {
-  const r = await dialog.showOpenDialog(win, {
-    title: 'Elige el juego o aplicación', properties: ['openFile'],
-    filters: [{ name: 'Programas', extensions: ['exe', 'lnk', 'bat'] }]
-  });
-  if (r.canceled || !r.filePaths[0]) return { status: 'cancel' };
-  const exe = r.filePaths[0];
-  const name = path.basename(exe).replace(/\.[^.]+$/, '');
+ipcMain.handle('add', async (e, file) => {
+  file = String(file || '');
+  if (!PICK_EXT.exe.test(file) || !fs.existsSync(file)) return { status: 'cancel' };
+  const name = path.basename(file).replace(/\.[^.]+$/, '');
+  // Acceso directo a un .exe sin argumentos: se guarda el programa real (portadas y carpeta del juego salen de ahí)
+  let exe = file;
+  if (/\.lnk$/i.test(file)) { try { const l = shell.readShortcutLink(file); if (!l.args && /\.exe$/i.test(l.target || '') && fs.existsSync(l.target)) exe = l.target; } catch {} }
   if (cfg.custom.some(c => norm(c.exe) === norm(exe))) return { status: 'dup', name };
   const id = customId(exe);
   cfg.custom.push({ id, name, exe });
@@ -1137,10 +1166,9 @@ ipcMain.handle('add', async () => {
   return { status: 'added', id };
 });
 
-ipcMain.handle('addFolder', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Elige la carpeta con tus juegos', properties: ['openDirectory'] });
-  if (r.canceled || !r.filePaths[0]) return { status: 'cancel' };
-  const root = r.filePaths[0];
+ipcMain.handle('addFolder', async (e, dir) => {
+  let root = '';
+  try { root = path.resolve(String(dir)); if (!dir || !fs.statSync(root).isDirectory()) return { status: 'cancel' }; } catch { return { status: 'cancel' }; }
   const exes = await findExes(root, 0, []);
   if (!exes.length) return { status: 'empty' };
 
@@ -1219,42 +1247,41 @@ ipcMain.handle('remove', (e, id) => {
   try { fs.unlinkSync(hdFile(id)); } catch {}
 });
 
-ipcMain.handle('setCover', async (e, id) => {
-  const r = await dialog.showOpenDialog(win, {
-    title: 'Elige una portada', properties: ['openFile'],
-    filters: [{ name: 'Imágenes', extensions: ['jpg', 'jpeg', 'png', 'webp'] }]
-  });
-  if (r.canceled || !r.filePaths[0]) return null;
-  fs.mkdirSync(coversDir(), { recursive: true });
-  saveCover(id, fs.readFileSync(r.filePaths[0]));
-  (cfg.manualCovers = cfg.manualCovers || {})[id] = 1; saveCfg();     // elegida a mano
-  return fileUrl(coverFile(id)) + '?t=' + Date.now();
-});
 ipcMain.handle('hdInfo', (e, id) => hdInfo(id));
 ipcMain.handle('hdOptions', (e, id, kind) => hdOptions(id, kind));
 ipcMain.handle('hdApply', (e, id, i, kind) => hdApply(id, i, kind));
 ipcMain.handle('hdDone', () => { hdCands.clear(); });             // libera las imágenes descargadas
 
-// ---------- Explorador de portadas propio (pantalla completa, cuadros grandes, mando) ----------
+// ---------- Explorador propio (pantalla completa, cuadros grandes, mando): portadas, programas, carpetas y videos ----------
+// El launcher nunca abre el diálogo de Windows. mode: 'cover', 'exe', 'video' o 'folder' (este solo muestra carpetas).
 const IMG_EXT = /\.(jpe?g|png|webp|gif|bmp)$/i;
+const VID_EXT = ['mp4', 'webm', 'mkv', 'mov', 'm4v'];
+const PICK_EXT = { cover: IMG_EXT, exe: /\.(exe|lnk|url|bat)$/i, video: new RegExp('\\.(' + VID_EXT.join('|') + ')$', 'i'), folder: /$^/ };
 const MAX_ENTRIES = 3000;
-// Lugares rápidos: carpeta del juego, Imágenes, Descargas, Escritorio, Documentos y los discos
-ipcMain.handle('pickPlaces', (e, id) => {
+// Lugares rápidos: carpeta del juego, los del tipo de archivo buscado, y los discos
+ipcMain.handle('pickPlaces', (e, id, mode = 'cover') => {
   const out = [];
   const g = listGames().find(x => x.id === id);
   const gdir = g && (g.exe ? path.dirname(g.exe) : g.dir);
   if (gdir && fs.existsSync(gdir)) out.push({ name: 'Carpeta del juego', path: gdir, kind: 'game' });
-  for (const [k, name] of [['pictures', 'Imágenes'], ['downloads', 'Descargas'], ['desktop', 'Escritorio'], ['documents', 'Documentos']]) {
+  const first = mode === 'cover' ? [['pictures', 'Imágenes']] : mode === 'video' ? [['videos', 'Videos']] : [];
+  for (const [k, name] of [...first, ['desktop', 'Escritorio'], ['downloads', 'Descargas'], ['documents', 'Documentos']]) {
     try { const p = app.getPath(k); if (fs.existsSync(p)) out.push({ name, path: p, kind: k }); } catch {}
+  }
+  if (mode === 'exe') {                                  // los accesos directos del menú Inicio
+    for (const [base, name] of [[process.env.ProgramData, 'Menú Inicio'], [process.env.APPDATA, 'Menú Inicio (usuario)']]) {
+      const p = base && path.join(base, 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+      if (p && fs.existsSync(p)) out.push({ name, path: p, kind: 'start' });
+    }
   }
   if (process.platform === 'win32') {
     for (const l of 'CDEFGHIJKLMNOPQRSTUVWXYZ') { const p = l + ':\\'; try { fs.accessSync(p); out.push({ name: 'Disco ' + l + ':', path: p, kind: 'drive' }); } catch {} }
   }
-  const last = cfg.pickDir && fs.existsSync(cfg.pickDir) ? cfg.pickDir : null;
-  return { places: out, start: last || out.find(p => p.kind === 'pictures')?.path || out[0]?.path || os.homedir() };
+  const dir = (cfg.pickDirs || {})[mode] || (mode === 'cover' && cfg.pickDir), last = dir && fs.existsSync(dir) ? dir : null;
+  return { places: out, start: last || out[out[0]?.kind === 'game' ? 1 : 0]?.path || out[0]?.path || os.homedir() };
 });
-// Contenido de una carpeta: primero las subcarpetas, después las imágenes (sin archivos ocultos ni de sistema)
-ipcMain.handle('pickList', async (e, dir) => {
+// Contenido de una carpeta: primero las subcarpetas, después los archivos del tipo buscado (sin ocultos ni de sistema)
+ipcMain.handle('pickList', async (e, dir, mode = 'cover') => {
   try {
     dir = path.resolve(String(dir));
     const ents = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -1262,12 +1289,12 @@ ipcMain.handle('pickList', async (e, dir) => {
     for (const d of ents) {
       if (d.name.startsWith('.') || d.name.startsWith('$') || /^(system volume information|desktop\.ini|thumbs\.db)$/i.test(d.name)) continue;
       if (d.isDirectory()) dirs.push({ name: d.name, path: path.join(dir, d.name), type: 'dir' });
-      else if (d.isFile() && IMG_EXT.test(d.name)) imgs.push({ name: d.name, path: path.join(dir, d.name), type: 'img' });
+      else if (d.isFile() && PICK_EXT[mode]?.test(d.name)) imgs.push({ name: d.name, path: path.join(dir, d.name), type: mode === 'cover' ? 'img' : 'file' });
     }
     const by = (a, b) => a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' });
     const entries = [...dirs.sort(by), ...imgs.sort(by)];
     const parent = path.dirname(dir);
-    cfg.pickDir = dir;                                   // se recuerda la última carpeta (se guarda al aplicar una portada)
+    (cfg.pickDirs = cfg.pickDirs || {})[mode] = dir;     // se recuerda la última carpeta de cada tipo
     return { dir, parent: parent !== dir ? parent : null, entries: entries.slice(0, MAX_ENTRIES), more: Math.max(0, entries.length - MAX_ENTRIES) };
   } catch { return { dir, error: 'No se puede abrir esta carpeta' }; }
 });
@@ -1275,9 +1302,14 @@ ipcMain.handle('pickList', async (e, dir) => {
 const thumbCache = new Map();
 ipcMain.handle('pickThumb', async (e, file) => {
   file = String(file);
-  if (!IMG_EXT.test(file)) return null;
   if (thumbCache.has(file)) return thumbCache.get(file);
   let url = null;
+  if (/\.(exe|lnk)$/i.test(file)) {                       // programas: su icono
+    try { url = (await app.getFileIcon(file, { size: 'large' })).toDataURL(); } catch {}
+    thumbCache.set(file, url);
+    return url;
+  }
+  if (!IMG_EXT.test(file)) return null;
   try {
     let img = await nativeImage.createThumbnailFromPath(file, { width: 360, height: 360 });
     if (img.isEmpty()) throw 0;
@@ -1310,7 +1342,7 @@ function note(msg) { if (win && !win.isDestroyed()) win.webContents.send('note',
 
 // ---------- Video de fondo ----------
 // Se elige en dos pasos para que la interfaz pueda avisar "Copiando…": el archivo se copia a la carpeta de datos
-// (sigue funcionando aunque muevas o borres el original). Solo se copia la ruta que salió del diálogo, nunca una que mande la interfaz.
+// (sigue funcionando aunque muevas o borres el original). La ruta sale del explorador propio y se comprueba aquí.
 // Video de la ola del XMB que viene con el launcher (assets/xmb-wave.mp4). En el .exe va fuera del .asar
 // (package.json → asarUnpack): Chromium lo lee directo del disco, sin pasar por el archivo empaquetado.
 function xmbVideoUrl() {
@@ -1318,16 +1350,15 @@ function xmbVideoUrl() {
   return fs.existsSync(f) ? fileUrl(f) : '';
 }
 const vidDir = () => path.join(userDir(), 'bgvideo');
-const VID_EXT = ['mp4', 'webm', 'mkv', 'mov', 'm4v'];
 let pendingVideo = null;
 function bgVideoUrl() {
   const f = cfg.bgVideo && path.join(vidDir(), path.basename(cfg.bgVideo));
   return f && fs.existsSync(f) ? coverUrl(f) : '';
 }
-ipcMain.handle('chooseVideo', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Elige un video para el fondo', properties: ['openFile'], filters: [{ name: 'Videos', extensions: VID_EXT }] });
-  if (r.canceled || !r.filePaths[0]) return null;
-  pendingVideo = r.filePaths[0];
+ipcMain.handle('chooseVideo', async (e, file) => {
+  file = String(file || '');
+  if (!PICK_EXT.video.test(file) || !fs.existsSync(file)) return null;
+  pendingVideo = file;
   let size = 0; try { size = fs.statSync(pendingVideo).size; } catch {}
   return { name: path.basename(pendingVideo), size };
 });

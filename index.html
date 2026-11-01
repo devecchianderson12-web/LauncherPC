@@ -247,6 +247,8 @@
     outline: calc(var(--u) * 4) solid transparent; outline-offset: calc(var(--u) * 4); transition: outline-color .12s; }
   .pk-i img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .2s; }
   .pk-i img.in { opacity: 1; }
+  .pk-i.ic img { display: none; width: 42%; height: auto; }
+  .pk-i.ic img.in { display: block; }
   .pk-i svg { width: 46%; height: 46%; opacity: .85; }
   .pk-n { font-size: calc(var(--u) * 20); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .8; text-align: center; }
   .pk-t.f { transform: scale(1.04); }
@@ -1182,22 +1184,28 @@ async function activate() {
   if (layout === 'steam' && stZone === 'rec') { const g = stRecs[stRi]; if (g) launchGame(g); return; }
   const it = items[sel]; if (!it) return;
   if (it.type === 'add') {
-    const r = await window.api.add();
-    if (r.status === 'added') { await load(true); const k = items.findIndex(g => g.id === r.id); if (k >= 0) go(k); }
-    else if (r.status === 'dup') {
-      toast('Ya está en la lista');
-      const k = items.findIndex(g => g.name.toLowerCase() === r.name.toLowerCase());
-      if (k >= 0) go(k);
-    }
+    pkStart('exe', 'Añadir juego o acceso directo', null, async file => {
+      const r = await window.api.add(file);
+      if (r.status === 'added') { await load(true); const k = items.findIndex(g => g.id === r.id); if (k >= 0) go(k); }
+      else if (r.status === 'dup') {
+        toast('Ya está en la lista');
+        const k = items.findIndex(g => g.name.toLowerCase() === r.name.toLowerCase());
+        if (k >= 0) go(k);
+      }
+      return true;
+    });
   } else if (it.type === 'cfg') openSettings();
   else launchGame(it);
 }
-// ---------- Explorador de portadas (tecla C / botón de portada) ----------
-// Propio del launcher en vez del diálogo de Windows: pantalla completa, cuadros grandes con miniatura, y se maneja
+// ---------- Explorador propio (portadas con C, añadir juegos, carpetas, video de fondo) ----------
+// El launcher no usa el diálogo de Windows: pantalla completa, cuadros grandes con miniatura, y se maneja
 // con teclado, mouse o mando. Arriba los lugares rápidos (zona 'places'), debajo la cuadrícula (zona 'grid').
+// pkStart(modo, título, juego, onPick, onCancel): onPick recibe la ruta y devuelve true si el explorador debe cerrarse.
 const picker = $('#picker'), pkGrid = $('#pk-grid'), pkPlaces = $('#pk-places');
 const pickerOpen = () => picker.classList.contains('open');
 const ICON_DIR = '<svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2h8.4A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" fill="#fff" opacity=".9"/></svg>';
+const ICON_FILE = '<svg viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z" fill="#fff" opacity=".85"/></svg>';
+const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_UP = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" stroke="#fff" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 let pk = null, pkSeq = 0;
 
@@ -1209,10 +1217,19 @@ function setCoverUrl(it, url) {
 async function changeCover() {
   const it = items[sel];
   if (!it || it.type === 'add' || it.type === 'cfg' || pickerOpen()) return;
-  hideArt();
-  const r = await window.api.pickPlaces(it.id);
-  pk = { item: it, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: [...r.places, { name: 'Explorador de Windows…', win: true }] };
-  $('#pk-title').textContent = 'Portada: ' + it.name;
+  pkStart('cover', 'Portada: ' + it.name, it, async file => {
+    const url = await window.api.pickApply(it.id, file);
+    if (!url) { toast('No se pudo usar esa imagen'); return false; }
+    setCoverUrl(it, url); toast('Portada cambiada');
+    return true;
+  });
+}
+async function pkStart(mode, title, it, onPick, onCancel) {
+  if (pickerOpen()) return;
+  hideArt(); document.activeElement?.blur();                 // Enter no debe volver a pulsar el botón de Ajustes que lo abrió
+  const r = await window.api.pickPlaces(it ? it.id : null, mode);
+  pk = { mode, onPick, onCancel, zone: 'grid', i: 0, pi: 0, entries: [], dir: '', parent: null, places: r.places };
+  $('#pk-title').textContent = title;
   pkPlaces.innerHTML = '';
   pk.places.forEach((p, k) => {
     const b = document.createElement('button'); b.className = 'pk-pl'; b.textContent = p.name;
@@ -1224,18 +1241,20 @@ async function changeCover() {
 }
 function closePicker() {
   if (!pk) return;
-  pk = null; pkSeq++; pkThumbQ.length = 0;
+  const cancel = pk.onCancel;
+  pk = null; pkSeq++;
+  cancel?.(); pkThumbQ.length = 0;
   picker.classList.remove('open');
   setTimeout(() => { if (!pk) pkGrid.innerHTML = ''; }, 250);            // libera las miniaturas cuando ya no se ven
   armArt();
 }
 async function pkOpen(dir, focus) {
   const seq = ++pkSeq;
-  const r = await window.api.pickList(dir);
+  const r = await window.api.pickList(dir, pk.mode);
   if (!pk || seq !== pkSeq) return;
   if (r.error) { toast(r.error); return; }
   pk.dir = r.dir; pk.parent = r.parent;
-  pk.entries = (r.parent ? [{ type: 'up', name: 'Subir', path: r.parent }] : []).concat(r.entries);
+  pk.entries = (r.parent ? [{ type: 'up', name: 'Subir', path: r.parent }] : []).concat(pk.mode === 'folder' ? [{ type: 'sel', name: 'Usar esta carpeta', path: r.dir }] : [], r.entries);
   const segs = r.dir.split(/[\\/]/).filter(Boolean);                   // rutas largas: solo las últimas carpetas
   $('#pk-path').textContent = (segs.length > 4 ? '…\\' + segs.slice(-3).join('\\') : r.dir) + (r.more ? ` · se muestran ${r.entries.length}, hay ${r.more} más` : '');
   pkThumbQ.length = 0; pkIO.disconnect();
@@ -1243,8 +1262,8 @@ async function pkOpen(dir, focus) {
   pk.entries.forEach((e, i) => {
     const t = document.createElement('div'); t.className = 'pk-t';
     const box = document.createElement('div'); box.className = 'pk-i';
-    if (e.type === 'img') { const im = document.createElement('img'); im.alt = ''; box.appendChild(im); t._file = e.path; }
-    else box.innerHTML = e.type === 'up' ? ICON_UP : ICON_DIR;
+    if (e.type === 'img' || e.type === 'file') { const im = document.createElement('img'); im.alt = ''; t._file = e.path; if (e.type === 'file') { box.classList.add('ic'); box.innerHTML = ICON_FILE; } box.appendChild(im); }
+    else box.innerHTML = e.type === 'up' ? ICON_UP : e.type === 'sel' ? ICON_OK : ICON_DIR;
     const n = document.createElement('div'); n.className = 'pk-n'; n.textContent = e.name;
     t.append(box, n);
     t.onclick = () => { pk.zone = 'grid'; pk.i = i; pkActivate(); };
@@ -1252,11 +1271,12 @@ async function pkOpen(dir, focus) {
     frag.appendChild(t);
   });
   pkGrid.innerHTML = '';
-  if (!r.entries.length) { const em = document.createElement('div'); em.id = 'pk-empty'; em.textContent = 'No hay imágenes ni carpetas aquí'; frag.appendChild(em); }
+  if (!r.entries.length) { const em = document.createElement('div'); em.id = 'pk-empty'; em.textContent = { cover: 'No hay imágenes ni carpetas aquí', exe: 'No hay programas ni carpetas aquí', video: 'No hay videos ni carpetas aquí' }[pk.mode] || 'No hay carpetas aquí'; frag.appendChild(em); }
   pkGrid.appendChild(frag); pkGrid.scrollTop = 0;
   [...pkGrid.children].forEach(t => { if (t._file) pkIO.observe(t); });
   const fi = focus ? pk.entries.findIndex(e => e.path === focus) : -1;
-  pk.i = fi >= 0 ? fi : (r.parent && pk.entries.length > 1 ? 1 : 0);
+  const fe = pk.entries.findIndex(e => e.type !== 'up' && e.type !== 'sel');   // de entrada, el primer elemento real
+  pk.i = fi >= 0 ? fi : fe >= 0 ? fe : (r.parent && pk.entries.length > 1 ? 1 : 0);
   pkMark(true);
 }
 // Miniaturas: solo las que entran en pantalla, 4 a la vez
@@ -1266,7 +1286,7 @@ function pkThumbRun() {
   while (pkThumbN < 4 && pkThumbQ.length) {
     const t = pkThumbQ.shift(), seq = pkSeq; pkThumbN++;
     window.api.pickThumb(t._file).then(url => {
-      if (url && seq === pkSeq) { const im = t.querySelector('img'); im.onload = () => im.classList.add('in'); im.src = url; }
+      if (url && seq === pkSeq) { const im = t.querySelector('img'); im.onload = () => { im.classList.add('in'); t.querySelector('.ic svg')?.remove(); }; im.src = url; }
     }).finally(() => { pkThumbN--; pkThumbRun(); });
   }
 }
@@ -1293,21 +1313,14 @@ function pkPage(d) { if (pk && pk.zone === 'grid') { const rows = Math.max(1, Ma
 async function pkActivate() {
   if (!pk) return;
   if (pk.zone === 'places') {
-    const p = pk.places[pk.pi];
-    if (p.win) {                                               // el diálogo clásico de Windows, por si hace falta
-      const it = pk.item, url = await window.api.setCover(it.id);
-      if (url) { setCoverUrl(it, url); closePicker(); toast('Portada cambiada'); }
-      return;
-    }
-    pk.zone = 'grid'; pkOpen(p.path); return;
+    pk.zone = 'grid'; pkOpen(pk.places[pk.pi].path); return;
   }
   const e = pk.entries[pk.i]; if (!e) return;
   if (e.type === 'up') pkOpen(e.path, pk.dir);                 // al subir, queda marcada la carpeta de la que venías
   else if (e.type === 'dir') pkOpen(e.path);
-  else {
-    const it = pk.item, url = await window.api.pickApply(it.id, e.path);
-    if (!url) { toast('No se pudo usar esa imagen'); return; }
-    setCoverUrl(it, url); closePicker(); toast('Portada cambiada');
+  else {                                                       // archivo elegido, o "Usar esta carpeta"
+    const p = pk, close = await p.onPick(e.path);
+    if (close && pk === p) { pk.onCancel = null; closePicker(); }
   }
 }
 function pkBack() {                                            // atrás: de los lugares a la cuadrícula, después carpeta de arriba, y al final cerrar
@@ -1596,9 +1609,12 @@ function setBgType(t, save = true) {
   syncWave();
   if (save) window.api.setCfg({ bgType: t });
 }
-async function pickVideo() {
-  const c = await window.api.chooseVideo();
-  if (!c) { if (bgVideoUrl) setBgType('video'); return; }
+function pickVideo() {
+  pkStart('video', 'Video de fondo', null, async file => { useVideo(file); return true; }, () => { if (bgVideoUrl) setBgType('video'); });
+}
+async function useVideo(file) {
+  const c = await window.api.chooseVideo(file);
+  if (!c) return;
   toast(c.size > 200e6 ? `Copiando ${c.name} (${Math.round(c.size / 1e6)} MB)…` : 'Copiando video…', 600000);
   const r = await window.api.useVideo();
   if (r.url) { bgVideoUrl = r.url; setBgType('video', false); toast('Video de fondo listo'); }
@@ -1739,8 +1755,9 @@ $('#b-mnon').onclick = () => setMin(true);
 $('#b-mnoff').onclick = () => setMin(false);
 
 // Cargar una carpeta completa: cada .exe (sin desinstaladores ni redistribuibles) pasa a ser un juego con su portada
-$('#b-folder').onclick = async () => {
-  const r = await window.api.addFolder();
+$('#b-folder').onclick = () => pkStart('folder', 'Carpeta con tus juegos', null, async dir => { addFolder(dir); return true; });
+async function addFolder(dir) {
+  const r = await window.api.addFolder(dir);
   if (r.status === 'cancel') return;
   refreshFolders();
   closeSettings();
@@ -1749,7 +1766,7 @@ $('#b-folder').onclick = async () => {
   await load(true);
   const k = items.findIndex(g => g.id === r.id); if (k >= 0) go(k);
   toast(r.added + (r.added === 1 ? ' juego añadido' : ' juegos añadidos') + (r.dup ? ` · ${r.dup} ya estaban` : ''), 3200);
-};
+}
 
 // Carpetas añadidas: cada una con su botón para quitarla (se quitan también sus juegos y portadas)
 async function refreshFolders() {
@@ -1789,7 +1806,7 @@ let lastStep = 0;
 addEventListener('keydown', e => {
   if (tuning) return;
   setHint(null);
-  if (settingsOpen()) { if (e.key === 'Escape') closeSettings(); return; }
+  if (settingsOpen() && !pickerOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
   if (hdOpen()) {
     if (k === 'ArrowRight') hdMove(1);
