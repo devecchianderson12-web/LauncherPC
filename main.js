@@ -1097,6 +1097,7 @@ function resumeLauncher(front) {
   if (!paused) return;
   paused = false;
   playEnd();                                               // el launcher volvió al frente: el juego se cerró
+  steamWatchEnd();
   clearTimeout(noneT); noneT = null;
   lowPrio(false);
   if (win && !win.isDestroyed()) {
@@ -1195,6 +1196,7 @@ ipcMain.handle('launch', (e, item) => {
   dropFront();
   cfg.recent[item.id] = Date.now();
   playLaunch(item);
+  steamWatchStart(item);
   saveCfg();
   if (item.type === 'steam') shell.openExternal('steam://rungameid/' + item.appid);
   else if (item.exe && !/\.exe$/i.test(item.exe)) shell.openPath(item.exe);           // .lnk, .url, .bat: los abre Windows
@@ -1409,7 +1411,7 @@ TROPHIES.push(['plat', 'platinum', 'Platino', 'Conseguí todos los demás logros
 const playStats = id => { const p = cfg.play || (cfg.play = {}); return p[id] || (p[id] = { opens: 0, secs: 0, best: 0, got: {} }); };
 function playCheck(id, name) {
   const s = playStats(id), now = Date.now(), fresh = [];
-  for (const [k, , n, , test] of TROPHIES) if (!s.got[k] && test(s)) { s.got[k] = now; fresh.push(n); }
+  for (const [k, tier, n, , test] of TROPHIES) if (!s.got[k] && test(s)) { s.got[k] = now; fresh.push(n); trophyNotify({ name: n, game: name, icon: trophySvg(tier) }); }
   if (fresh.length && win && !win.isDestroyed()) win.webContents.send('trophy', { game: name, names: fresh });
 }
 let session = null;                                        // { id, name, t0: inicio del tiempo (null = esperando que aparezca), tk: último guardado }
@@ -1449,6 +1451,89 @@ function trophies(id) {
   return { total: list.length, done: list.filter(t => t.done).length, secs: s.secs + live, opens: s.opens, best: s.best || 0,
     list: list.sort((a, b) => (b.done - a.done) || (b.time - a.time)) };
 }
+// ---------- Aviso de logro: arriba a la derecha, encima de cualquier juego, con sonido ----------
+// Ventana propia, transparente, sin foco y que deja pasar el mouse: entra deslizándose desde el borde derecho, queda unos segundos y sale.
+// El sonido es un timbre sintetizado (dos notas suaves con eco), no un archivo. Con juegos en pantalla completa exclusiva no se ve.
+const TROPHY_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent;overflow:hidden;font-family:"Segoe UI",sans-serif;color:#fff;user-select:none}
+#t{position:absolute;right:18px;top:18px;width:430px;height:88px;display:flex;align-items:center;gap:14px;padding:0 18px;box-sizing:border-box;border-radius:14px;
+  background:linear-gradient(180deg,rgba(28,34,52,.96),rgba(14,18,30,.96));box-shadow:0 12px 32px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.08);
+  transform:translateX(120%);opacity:0;transition:transform .5s cubic-bezier(.2,.9,.25,1),opacity .35s}
+#t.in{transform:none;opacity:1}
+#t img{width:58px;height:58px;border-radius:8px;flex:none;background:#0f2a6e}
+.x{min-width:0;flex:1}.k{font-size:13px;opacity:.75;letter-spacing:.03em}
+.n{font-size:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.g{font-size:13px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style></head><body><div id="t"><img id="i" alt=""><div class="x"><div class="k">🏆 Logro desbloqueado</div><div class="n" id="n"></div><div class="g" id="g"></div></div></div>
+<script>
+let ctx;
+function chime() {
+  ctx = ctx || new AudioContext(); const out = ctx.createGain(), dl = ctx.createDelay(), fb = ctx.createGain(), t0 = ctx.currentTime + .03;
+  out.gain.value = .5; dl.delayTime.value = .16; fb.gain.value = .28; out.connect(ctx.destination); out.connect(dl); dl.connect(fb); fb.connect(dl); fb.connect(ctx.destination);
+  for (const [f, d] of [[1046.5, 0], [1568, .12], [2093, .24]]) for (const [m, v] of [[1, .32], [3, .04]]) {
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * m;
+    g.gain.setValueAtTime(0, t0 + d); g.gain.linearRampToValueAtTime(v, t0 + d + .012); g.gain.exponentialRampToValueAtTime(.0001, t0 + d + 1.4);
+    o.connect(g); g.connect(out); o.start(t0 + d); o.stop(t0 + d + 1.5);
+  }
+}
+window.show = (n, g, i) => {
+  document.getElementById('n').textContent = n; document.getElementById('g').textContent = g; document.getElementById('i').src = i || '';
+  const t = document.getElementById('t'); t.classList.remove('in'); void t.offsetWidth; requestAnimationFrame(() => t.classList.add('in'));
+  try { chime(); } catch {}
+  setTimeout(() => t.classList.remove('in'), 5000);
+};
+</script></body></html>`;
+const TROPHY_COL = { bronze: '#cd7f45', silver: '#c9d1d9', gold: '#f0c03a', platinum: '#a9e1ff' };
+const trophySvg = tier => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72"><rect width="72" height="72" rx="10" fill="#0f2a6e"/><g fill="${TROPHY_COL[tier]}"><path d="M22 14h28v12a14 14 0 0 1-28 0z"/><path d="M22 18h-8a8 8 0 0 0 8 10M50 18h8a8 8 0 0 1-8 10" fill="none" stroke="${TROPHY_COL[tier]}" stroke-width="4"/><rect x="33" y="39" width="6" height="9"/><rect x="25" y="48" width="22" height="6" rx="2"/><rect x="21" y="54" width="30" height="5" rx="2"/></g></svg>`);
+let trophyWin = null, trophyReady = null, trophyBusy = false, trophyHideT = null;
+const trophyList = [];
+function trophyWindow() {
+  if (trophyWin && !trophyWin.isDestroyed()) return trophyReady;
+  const d = screen.getDisplayMatching(win && !win.isDestroyed() ? win.getBounds() : screen.getPrimaryDisplay().bounds).bounds, W = 470, H = 124;
+  trophyWin = new BrowserWindow({ x: d.x + d.width - W, y: d.y, width: W, height: H, show: false, frame: false, transparent: true, resizable: false, movable: false,
+    focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, backgroundColor: '#00000000',
+    webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' } });
+  trophyWin.setAlwaysOnTop(true, 'screen-saver'); trophyWin.setIgnoreMouseEvents(true);
+  trophyWin.on('closed', () => { trophyWin = null; });
+  trophyReady = trophyWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(TROPHY_HTML)).catch(() => {});
+  return trophyReady;
+}
+function trophyNotify(t) { trophyList.push(t); trophyNext(); }
+async function trophyNext() {
+  if (trophyBusy || !trophyList.length) return;
+  trophyBusy = true; clearTimeout(trophyHideT);
+  const t = trophyList.shift();
+  try {
+    await trophyWindow();
+    trophyWin.showInactive(); trophyWin.setAlwaysOnTop(true, 'screen-saver');
+    await trophyWin.webContents.executeJavaScript(`show(${JSON.stringify(t.name)}, ${JSON.stringify(t.game || '')}, ${JSON.stringify(t.icon || '')})`);
+  } catch {}
+  setTimeout(() => {                                       // 5 s a la vista + la salida; después el siguiente o se esconde
+    trophyBusy = false;
+    if (trophyList.length) trophyNext();
+    else trophyHideT = setTimeout(() => { if (trophyWin && !trophyWin.isDestroyed() && !trophyBusy) trophyWin.hide(); }, 200);
+  }, 5700);
+}
+// Logros reales de Steam en el momento: mientras corre un juego de Steam se revisan sus archivos de appcache\stats cada 8 s
+// (achievements() solo relee si cambiaron) y se avisa cada logro nuevo. Al cerrarse el juego se revisa una última vez.
+let steamWatch = null;
+async function steamWatchStart(item) {
+  steamWatchStop();
+  if (!item || item.type !== 'steam' || !item.appid) return;
+  const a = await achievements(item.appid).catch(() => null);
+  if (!a) return;                                          // el juego no tiene logros de Steam
+  steamWatch = { appid: String(item.appid), name: item.name, done: new Set(a.list.filter(x => x.done).map(x => x.id)), timer: setInterval(steamWatchTick, 8000), until: Date.now() + 12 * 3600e3 };
+}
+async function steamWatchTick() {
+  const w = steamWatch; if (!w) return;
+  if (Date.now() > w.until) { steamWatchStop(); return; }
+  const a = await achievements(w.appid).catch(() => null);
+  if (!a || steamWatch !== w) return;
+  for (const x of a.list) if (x.done && !w.done.has(x.id)) { w.done.add(x.id); trophyNotify({ name: x.name, game: w.name, icon: x.icon }); }
+}
+function steamWatchStop() { if (steamWatch) clearInterval(steamWatch.timer); steamWatch = null; }
+function steamWatchEnd() { if (!steamWatch) return; const w = steamWatch; steamWatchTick().finally(() => { if (steamWatch === w) steamWatchStop(); }); }
+
 ipcMain.handle('trophies', (e, id) => trophies(String(id)));
 ipcMain.handle('trophySummary', (e, id) => { const t = trophies(String(id)); return { done: t.done, total: t.total }; });
 

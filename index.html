@@ -1562,14 +1562,9 @@ function achHint() {
   const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { back: 'Esc', scan: 'RePág', layout: 'AvPág' };
   $('#hd-foot2').innerHTML = `<span class="hk">${glyph(L.back, k)}cerrar</span><span class="hk">${glyph(L.scan, k)}${glyph(L.layout, k)}de a 6</span><span class="hk">flechas: recorrer</span>`;
 }
-const trophyQ = [];
-function trophyFlush() {
-  if (document.body.classList.contains('paused') || !trophyQ.length) return;
-  const t = trophyQ.shift(); toast('🏆 Logro desbloqueado: ' + t, 3500);
-  if (trophyQ.length) setTimeout(trophyFlush, 3700);
-  const it = items[sel]; if (it) achBadge(it);
-}
-window.api.onTrophy(({ game, names }) => { names.forEach(n => trophyQ.push(n + ' — ' + game)); trophyFlush(); });
+// El aviso lo muestra main.js (ventana arriba a la derecha, encima de todo); acá solo se actualiza el progreso junto al nombre
+function trophyFlush() { const it = items[sel]; if (it) achBadge(it); }
+window.api.onTrophy(trophyFlush);
 achEl.addEventListener('click', e => { if (e.target === achEl) achClose(); });
 achEl.addEventListener('contextmenu', e => { e.preventDefault(); achClose(); });
 // ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
