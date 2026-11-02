@@ -258,6 +258,30 @@
   #pk-foot { display: flex; gap: calc(var(--u) * 30); font-size: calc(var(--u) * 21); opacity: .8; flex-wrap: wrap; }
   #pk-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); }
   /* Portada en HD: ventana mediana con bordes redondeados sobre el launcher (oscurecido), solo para el juego elegido */
+  /* Logros de Steam: ventana mediana como la de portadas en HD, una fila por logro (desbloqueados primero) */
+  #ach { position: fixed; inset: 0; z-index: 13; background: rgba(0,4,24,.55); display: flex; align-items: center; justify-content: center;
+    opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
+  #ach.open { opacity: 1; visibility: visible; transition: opacity .2s; }
+  #ach .hd-box { gap: calc(var(--u) * 18); }
+  #ach-top { display: flex; align-items: flex-end; gap: calc(var(--u) * 30); }
+  #ach-title { font-size: calc(var(--u) * 34); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  #ach-count { font-size: calc(var(--u) * 24); opacity: .85; white-space: nowrap; }
+  #ach-bar { height: calc(var(--u) * 8); border-radius: calc(var(--u) * 4); background: rgba(255,255,255,.12); overflow: hidden; }
+  #ach-bar i { display: block; height: 100%; background: linear-gradient(90deg, #7fb2ff, #fff); border-radius: inherit; transform-origin: 0 50%; }
+  #ach-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: calc(var(--u) * 10); padding: calc(var(--u) * 6); }
+  #ach-list::-webkit-scrollbar { display: none; }
+  .ac { display: flex; align-items: center; gap: calc(var(--u) * 20); padding: calc(var(--u) * 12) calc(var(--u) * 18); border-radius: calc(var(--u) * 14); background: rgba(255,255,255,.06);
+    outline: calc(var(--u) * 3) solid transparent; outline-offset: calc(var(--u) * 2); flex: none; }
+  .ac.f { outline-color: #fff; background: rgba(255,255,255,.12); }
+  .ac img { width: calc(var(--u) * 72); height: calc(var(--u) * 72); border-radius: calc(var(--u) * 8); flex: none; background: rgba(255,255,255,.08); }
+  .ac.no img { opacity: .55; }
+  .ac .at { flex: 1; min-width: 0; }
+  .ac .an { font-size: calc(var(--u) * 24); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ac .ad { font-size: calc(var(--u) * 18); opacity: .7; margin-top: calc(var(--u) * 4); }
+  .ac .aw { font-size: calc(var(--u) * 17); opacity: .75; white-space: nowrap; flex: none; }
+  .ac.no .an { opacity: .65; }
+  #title .tr, #st-sub .tr { font-size: .5em; opacity: .8; margin-left: .8em; vertical-align: middle; }
+  #st-sub .tr { font-size: 1em; margin-left: .6em; }
   #hdpick { position: fixed; inset: 0; z-index: 13; background: rgba(0,4,24,.55); display: flex; align-items: center; justify-content: center;
     opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
   #hdpick.open { opacity: 1; visibility: visible; transition: opacity .2s; }
@@ -285,7 +309,7 @@
   .hd-c.f .hd-i { outline-color: #fff; }
   .hd-c.f .hd-l { opacity: 1; }
   #hd-msg { grid-column: 1 / -1; align-self: center; text-align: center; font-size: calc(var(--u) * 30); opacity: .75; }
-  #hd-foot { display: flex; gap: calc(var(--u) * 30); align-items: center; font-size: calc(var(--u) * 21); opacity: .85; flex-wrap: wrap; }
+  #hd-foot, #hd-foot2 { display: flex; gap: calc(var(--u) * 30); align-items: center; font-size: calc(var(--u) * 21); opacity: .85; flex-wrap: wrap; }
   /* Música: la página es una vista aparte arriba de todo (570x1032, a la izquierda); esto es lo que queda al lado */
   #mu { position: fixed; inset: 0; z-index: 14; background: rgba(0,4,24,.86); opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
   #mu.open { opacity: 1; visibility: visible; transition: opacity .2s; }
@@ -311,7 +335,7 @@
   #mk-keys { display: grid; grid-template-columns: repeat(10, 1fr); gap: calc(var(--u) * 8); }
   .mk-k { height: calc(var(--u) * 66); border-radius: calc(var(--u) * 10); background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 26); cursor: pointer; }
   .mk-k.f { background: #fff; color: #0c1e5c; }
-  #hd-foot .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); cursor: pointer; }
+  #hd-foot .hk, #hd-foot2 .hk { display: inline-flex; align-items: center; gap: calc(var(--u) * 8); cursor: pointer; }
 </style>
 </head>
 <body class="ps4 enter">
@@ -347,6 +371,12 @@
 </div>
 <div id="mu"><div id="mu-side"><div id="mu-title">YouTube Music</div><div id="mu-hint"></div>
   <div id="mk"><div id="mk-text"></div><div id="mk-keys"></div></div></div></div>
+<div id="ach"><div class="hd-box">
+  <div id="ach-top"><div id="ach-title"></div><div id="ach-count"></div></div>
+  <div id="ach-bar"><i></i></div>
+  <div id="ach-list"></div>
+  <div id="hd-foot2" class="hd-foot"></div>
+</div></div>
 <div id="hdpick"><div class="hd-box">
   <div><div id="hd-title"></div><div id="hd-sub"></div>
     <div id="hd-tabs"><span id="hd-tl"></span><span data-k="cover">Portada</span><span data-k="banner">Banner del fondo</span><span id="hd-tr"></span></div></div>
@@ -1060,7 +1090,7 @@ function stPlace(instant) {
   // nombre y última vez jugado, justo debajo de la elegida
   info.style.transform = `translate3d(${((ST.ax + x - stOff) * u).toFixed(1)}px, ${((ST.top + ST.h + (z > 1 ? ST.h * (z - 1) * .8 : 0) + 26) * u).toFixed(1)}px, 0)`;
   const it = items[sel];
-  if (it) { $('#st-name').textContent = it.name; $('#st-sub').textContent = it.last ? '▶  Jugado ' + ago(it.last) : (SUB[it.type] || ''); }
+  if (it) { $('#st-name').textContent = it.name; $('#st-sub').textContent = it.last ? '▶  Jugado ' + ago(it.last) : (SUB[it.type] || ''); achBadge(it); }
   if (instant) { void row.offsetWidth; row.classList.remove('inst'); info.classList.remove('inst'); }
 }
 // Fila de abajo: los últimos juegos jugados en tarjetas apaisadas (banner si es de Steam, si no la portada)
@@ -1108,8 +1138,9 @@ let titleAnim = null;
 function updateInfo() {
   const it = items[sel]; if (!it) return;
   const ti = $('#title');
-  if (ti.textContent === it.name) return;
-  ti.textContent = it.name;
+  achBadge(it);
+  if (ti.dataset.id === it.id) return;
+  ti.dataset.id = it.id; ti.textContent = it.name; achBadge(it);
   if (titleAnim) titleAnim.cancel();
   titleAnim = ti.animate([{ opacity: 0, transform: 'translate3d(0, 12px, 0)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.9,.25,1)' });
 }
@@ -1472,6 +1503,56 @@ function musicKey(e) {                                       // teclado físico 
   else if (k.toLowerCase() === 'e') musicCmd('next');
 }
 window.api.onMusicGone?.(() => { if (muOn()) { mkClose(); muEl.classList.remove('open'); toast('Se cerró YouTube Music'); armArt(); } });
+// ---------- Logros de Steam (RT / tecla T sobre un juego de Steam) ----------
+// main.js los lee de los archivos de Steam. Junto al nombre del juego se muestra el progreso (🏆 12/58); la ventana lista todos,
+// los desbloqueados primero con su fecha. Arriba/abajo recorre, LB/RB de a 6, atrás cierra.
+const achEl = $('#ach'), achList = $('#ach-list'), achOpen = () => achEl.classList.contains('open');
+const achSum = {};                                           // progreso por appid (null = el juego no tiene logros)
+let ach = null;
+function achBadge(it) {
+  const put = s => {
+    for (const el of [$('#title'), $('#st-sub')]) {
+      el.querySelector('.tr')?.remove();
+      if (s && (el.id !== 'title' || el.dataset.id === it.id)) { const b = document.createElement('span'); b.className = 'tr'; b.textContent = '🏆 ' + s.done + '/' + s.total; el.appendChild(b); }
+    }
+  };
+  if (it.type !== 'steam' || !it.appid) { put(null); return; }
+  if (it.appid in achSum) { put(achSum[it.appid]); return; }
+  window.api.achSummary(it.appid).then(s => { achSum[it.appid] = s; if (items[sel] === it) put(s); });
+}
+async function achShow() {
+  const it = items[sel];
+  if (ach || !it || it.type !== 'steam' || !it.appid) { if (it && !SYS[it.type] && it.type !== 'steam') toast('Los logros solo están para los juegos de Steam'); return; }
+  const a = await window.api.achievements(it.appid);
+  if (!a) { toast('Este juego no tiene logros de Steam (o todavía no lo abriste)'); return; }
+  achSum[it.appid] = { done: a.done, total: a.total };
+  ach = { it, a, f: 0 };
+  $('#ach-title').textContent = it.name;
+  $('#ach-count').textContent = `${a.done} de ${a.total} logros · ${Math.round(a.done * 100 / a.total)} %`;
+  $('#ach-bar i').style.transform = `scaleX(${a.done / a.total})`;
+  const fmt = t => new Date(t).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+  const frag = document.createDocumentFragment();
+  for (const x of a.list) {
+    const r = document.createElement('div'); r.className = 'ac' + (x.done ? '' : ' no');
+    const im = new Image(); im.alt = ''; im.loading = 'lazy'; im.decoding = 'async'; if (x.icon) im.src = x.icon;
+    const t = document.createElement('div'); t.className = 'at';
+    const n = document.createElement('div'); n.className = 'an'; n.textContent = !x.done && x.hidden ? 'Logro oculto' : x.name;
+    const d = document.createElement('div'); d.className = 'ad'; d.textContent = !x.done && x.hidden ? 'Seguí jugando para descubrirlo' : x.desc;
+    const w = document.createElement('div'); w.className = 'aw'; w.textContent = x.done ? (x.time ? fmt(x.time) : 'Desbloqueado') : '🔒';
+    t.append(n, d); r.append(im, t, w); frag.appendChild(r);
+  }
+  achList.textContent = ''; achList.appendChild(frag); achList.scrollTop = 0;
+  hideArt(); achEl.classList.add('open'); achMark(); achHint();
+}
+function achMark() { [...achList.children].forEach((c, i) => c.classList.toggle('f', i === ach.f)); achList.children[ach.f]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+function achMove(d) { if (!ach) return; const n = Math.max(0, Math.min(ach.a.list.length - 1, ach.f + d)); if (n !== ach.f) { ach.f = n; achMark(); } }
+function achClose() { if (!ach) return; ach = null; achEl.classList.remove('open'); setTimeout(() => { if (!ach) achList.textContent = ''; }, 250); armArt(); }
+function achHint() {
+  const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { back: 'Esc', scan: 'RePág', layout: 'AvPág' };
+  $('#hd-foot2').innerHTML = `<span class="hk">${glyph(L.back, k)}cerrar</span><span class="hk">${glyph(L.scan, k)}${glyph(L.layout, k)}de a 6</span><span class="hk">flechas: recorrer</span>`;
+}
+achEl.addEventListener('click', e => { if (e.target === achEl) achClose(); });
+achEl.addEventListener('contextmenu', e => { e.preventDefault(); achClose(); });
 // ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
 // Ventana mediana sobre el launcher, solo para el juego seleccionado: hasta 50 portadas (5 columnas con scroll) de internet o de su carpeta
 // de 600x900 o más (nunca menos). Aceptar aplica la marcada · atrás / △ / Esc cierra. Sin resultados ofrece buscar en el PC.
@@ -1945,6 +2026,12 @@ addEventListener('keydown', e => {
   if (settingsOpen() && !pickerOpen()) { if (e.key === 'Escape') closeSettings(); return; }
   const k = e.key;
   if (muOn()) { musicKey(e); e.preventDefault(); return; }
+  if (achOpen()) {
+    if (k === 'ArrowDown') achMove(1); else if (k === 'ArrowUp') achMove(-1);
+    else if (k === 'PageDown') achMove(6); else if (k === 'PageUp') achMove(-6);
+    else if (k === 'Escape' || k === 'Backspace' || k.toLowerCase() === 't') achClose();
+    e.preventDefault(); return;
+  }
   if (hdOpen()) {
     if (k === 'ArrowRight') hdMove(1);
     else if (k === 'ArrowLeft') hdMove(-1);
@@ -1991,6 +2078,7 @@ addEventListener('keydown', e => {
   else if (k.toLowerCase() === 's') rescan();
   else if (k.toLowerCase() === 'p') upgradeCovers();
   else if (k.toLowerCase() === 'm') musicOpen();
+  else if (k.toLowerCase() === 't') achShow();
   else if (k.toLowerCase() === 'l') setLayout(nextLayout());
   else if (k.toLowerCase() === 'f') toggleFps();
 });
@@ -2029,8 +2117,8 @@ function glyph(name, kind) {
   const col = PS_CLS[name] ? `ps-${PS_CLS[name]}` : pal === 'xbox' && face ? `xbox-${name}` : '';
   return `<span class="bk ${face ? 'fc' : 'pl'} ${pal === 'ps' || pal === 'xbox' ? col : ''}">${esc}</span>`;
 }
-const HINT_ACTS = [['ok', 'jugar'], ['scan', 'buscar juegos'], ['cover', 'portada'], ['upgrade', 'portadas HD'], ['layout', 'diseño'], ['remove', 'quitar'], ['back', 'cerrar']];
-const KB_KEYS = { ok: 'Enter', scan: 'S', cover: 'C', upgrade: 'P', layout: 'L', remove: 'Supr', back: 'Esc' };
+const HINT_ACTS = [['ok', 'jugar'], ['scan', 'buscar juegos'], ['cover', 'portada'], ['upgrade', 'portadas HD'], ['player', 'logros'], ['layout', 'diseño'], ['remove', 'quitar'], ['back', 'cerrar']];
+const KB_KEYS = { ok: 'Enter', scan: 'S', cover: 'C', upgrade: 'P', player: 'T', layout: 'L', remove: 'Supr', back: 'Esc' };
 const hintHtml = (names, kind) => HINT_ACTS.map(([a, t]) => `<span class="hk">${glyph(names[a], kind)}${t}</span>`).join('');
 
 function kindOf(gp) {
@@ -2062,6 +2150,7 @@ function setHint(gp) {                                        // gp = null -> te
   $('#hint').innerHTML = gp ? hintHtml(labelsOf(gp), kindOf(gp)) : hintHtml(KB_KEYS, 'kb');
   if (pickerOpen()) pkHint();
   if (hdOpen()) hdHint();
+  if (achOpen()) achHint();
   muHint();
 }
 setHint(null);
@@ -2124,6 +2213,12 @@ function poll() {
     }
     return;
   }
+  if (achOpen()) {
+    edge('back', on('back'), achClose); edge('player', on('player'), sh(achClose));
+    edge('scan', on('scan'), sh(() => achMove(-6))); edge('layout', on('layout'), sh(() => achMove(6)));
+    repV(on('down') ? 1 : on('up') ? -1 : 0, now, achMove);
+    return;
+  }
   if (hdOpen()) {
     edge('ok', on('ok'), hdChoose); edge('back', on('back'), hdClose); edge('cover', on('cover'), hdClose); edge('remove', on('remove'), hdPc);
     edge('scan', on('scan'), sh(() => hdTab(-1))); edge('layout', on('layout'), sh(() => hdTab(1)));     // L1 / R1: pestaña Portada / Banner
@@ -2150,6 +2245,7 @@ function poll() {
   edge('remove', on('remove'), removeCurrent); edge('cover', on('cover'), changeCover); edge('scan', on('scan'), sh(rescan));
   edge('layout', on('layout'), sh(() => setLayout(nextLayout())));
   edge('upgrade', on('upgrade'), sh(upgradeCovers));
+  edge('player', on('player'), sh(achShow));
   repH(on('right') ? 1 : on('left') ? -1 : 0, now, d => step(d, 0));
   repV(on('down') ? 1 : on('up') ? -1 : 0, now, d => step(0, d));
 }
@@ -2236,7 +2332,7 @@ window.api.onEnter(async () => {
   if (!moved) { sel = 0; place(true); updateInfo(); }
   armArt(); hintEmpty(); autotune();
 });
-window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hdClose(); musicClose(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
+window.api.onLeave(() => { document.body.classList.add('leaving'); closePicker(); hdClose(); achClose(); musicClose(); hideArt(); stopPoll(); stopClock(); shown = false; syncWave(); });
 
 // ---------- Pausa: otro programa está en primer plano ----------
 // La ventana sigue detrás con su último fotograma, pero sin fondo animado, mando, reloj ni temporizadores: no consume nada.

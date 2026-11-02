@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
   onEnter: cb => ipcRenderer.on('enter', cb),
   musicShow: on => ipcRenderer.invoke('musicShow', on),
   musicCmd: (cmd, ...a) => ipcRenderer.invoke('musicCmd', cmd, ...a),
+  achievements: appid => ipcRenderer.invoke('achievements', appid),
+  achSummary: appid => ipcRenderer.invoke('achSummary', appid),
   musicBack: () => ipcRenderer.invoke('musicBack'),
   musicExpand: () => ipcRenderer.invoke('musicExpand'),
   musicKb: on => ipcRenderer.invoke('musicKb', on),

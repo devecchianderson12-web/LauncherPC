@@ -1301,6 +1301,88 @@ ipcMain.handle('remove', (e, id) => {
   try { fs.unlinkSync(hdFile(id)); } catch {}
 });
 
+// ---------- Logros de Steam ----------
+// Se leen los archivos que el propio Steam guarda en appcache\stats, sin claves ni cuentas: UserGameStatsSchema_<appid>.bin trae cada
+// logro (nombre y descripción en español, ícono) y UserGameStats_<cuenta>_<appid>.bin cuáles están desbloqueados (bits) y cuándo.
+// Solo juegos de Steam. Cuenta: la última con la que se entró a Steam (Timestamp mayor en loginusers.vdf); si esa no tiene datos
+// del juego, el archivo más reciente de otra cuenta. Se vuelve a leer solo si los archivos cambiaron.
+function readKV(buf) {                                     // KeyValues binario de Steam
+  let i = 0;
+  const cstr = () => { const s = i; while (i < buf.length && buf[i] !== 0) i++; return buf.toString('utf8', s, i++); };
+  const node = () => {
+    const o = {};
+    while (i < buf.length) {
+      const t = buf[i++];
+      if (t === 0x08) return o;
+      const k = cstr();
+      if (t === 0x00) o[k] = node();
+      else if (t === 0x01) o[k] = cstr();
+      else if (t === 0x02 || t === 0x06) { o[k] = buf.readInt32LE(i); i += 4; }
+      else if (t === 0x03) { o[k] = buf.readFloatLE(i); i += 4; }
+      else if (t === 0x07 || t === 0x0A) { o[k] = Number(buf.readBigInt64LE(i)); i += 8; }
+      else throw new Error('KeyValues: tipo ' + t);
+    }
+    return o;
+  };
+  return node();
+}
+const achCache = new Map();
+let steamAcct = null;
+async function steamAccount(sp) {
+  if (steamAcct !== null) return steamAcct;
+  steamAcct = '';
+  try {
+    const t = await fs.promises.readFile(path.join(sp, 'config', 'loginusers.vdf'), 'utf8');
+    let best = -1;
+    for (const m of t.matchAll(/"(7656\d{13})"\s*\{([^}]*)\}/g)) {
+      const ts = +(/"Timestamp"\s*"(\d+)"/i.exec(m[2]) || [])[1] || 0, recent = /"MostRecent"\s*"1"/i.test(m[2]);
+      const score = recent ? Infinity : ts;
+      if (score > best) { best = score; steamAcct = (BigInt(m[1]) - 76561197960265728n).toString(); }
+    }
+  } catch {}
+  return steamAcct;
+}
+const pickLang = o => !o || typeof o !== 'object' ? (o || '') : (Object.entries(o).find(([k]) => /^latam$/i.test(k)) || Object.entries(o).find(([k]) => /^spanish$/i.test(k)) || Object.entries(o).find(([k]) => /^english$/i.test(k)) || [, ''])[1];
+async function achievements(appid) {
+  appid = String(appid || '');
+  if (!/^\d+$/.test(appid)) return null;
+  const sp = await steamPath(); if (!sp) return null;
+  const dir = path.join(sp, 'appcache', 'stats'), schema = path.join(dir, `UserGameStatsSchema_${appid}.bin`);
+  let sst; try { sst = fs.statSync(schema); } catch { return null; }
+  const acct = await steamAccount(sp);
+  let user = acct && path.join(dir, `UserGameStats_${acct}_${appid}.bin`);
+  if (!user || !fs.existsSync(user)) {                     // otra cuenta: la más reciente que tenga datos de este juego
+    const re = new RegExp(`^UserGameStats_\\d+_${appid}\\.bin$`);
+    const all = (await fs.promises.readdir(dir).catch(() => [])).filter(f => re.test(f)).map(f => path.join(dir, f));
+    user = all.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] || null;
+  }
+  let ust = null; try { ust = user && fs.statSync(user); } catch {}
+  const key = appid + ':' + sst.mtimeMs + ':' + (user || '') + ':' + (ust ? ust.mtimeMs : 0);
+  if (achCache.get(appid)?.key === key) return achCache.get(appid).val;
+  let val = null;
+  try {
+    const sch = readKV(await fs.promises.readFile(schema)), root = sch[appid] || Object.values(sch)[0] || {};
+    const us = user ? (readKV(await fs.promises.readFile(user)).cache || {}) : {};
+    const img = f => f ? `https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/${appid}/${f}` : null;
+    const list = [];
+    for (const [sid, s] of Object.entries(root.stats || {})) {
+      if (!s || !s.bits) continue;
+      const u = us[sid] || {}, data = (u.data | 0) >>> 0, times = u.AchievementTimes || {};
+      for (const [bk, b] of Object.entries(s.bits)) {
+        const bit = +(b.bit ?? bk), d = b.display || {}, done = ((data >>> bit) & 1) === 1;
+        list.push({ id: b.name || sid + '_' + bit, name: pickLang(d.name) || b.name || '', desc: pickLang(d.desc), hidden: +d.hidden === 1,
+          icon: img(done ? d.icon : d.icon_gray || d.icon), done, time: done && times[bk] ? times[bk] * 1000 : 0 });
+      }
+    }
+    if (list.length) val = { appid, game: root.gamename || '', total: list.length, done: list.filter(a => a.done).length,
+      list: list.sort((a, b) => (b.done - a.done) || (b.time - a.time)) };   // desbloqueados primero (el último arriba), después los que faltan
+  } catch {}
+  achCache.set(appid, { key, val });
+  return val;
+}
+ipcMain.handle('achievements', (e, appid) => achievements(appid));
+ipcMain.handle('achSummary', async (e, appid) => { const a = await achievements(appid); return a ? { done: a.done, total: a.total } : null; });
+
 ipcMain.handle('hdInfo', (e, id) => hdInfo(id));
 ipcMain.handle('hdOptions', (e, id, kind) => hdOptions(id, kind));
 ipcMain.handle('hdApply', (e, id, i, kind) => hdApply(id, i, kind));
