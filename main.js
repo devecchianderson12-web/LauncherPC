@@ -1448,6 +1448,8 @@ const MUSIC_NAV = `window.__ps = window.__ps || (() => {
     e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true }));
   };
   const hit = q => document.querySelector(q)?.click();
+  // el que se ve de verdad (hay botones repetidos ocultos): clic real; si ninguno se ve, clic por código
+  const vclick = q => { const e = [...document.querySelectorAll(q)].find(seen); if (e) { const c = mid(e); return { click: { x: Math.round(c.x), y: Math.round(c.y) } }; } hit(q); return null; };
   return {
     move(dx, dy) {
       if (!live() || !seen(cur)) { first(); return; }
@@ -1463,7 +1465,8 @@ const MUSIC_NAV = `window.__ps = window.__ps || (() => {
     active() { const e = document.activeElement; if (field(e)) { cur = e; place(); return { field: true, value: e.value, pass: e.type === 'password' }; } return null; },
     type(v) { if (field(cur)) setText(cur, v); },
     enter() { if (!field(cur)) return; for (const t of ['keydown', 'keypress', 'keyup']) cur.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true })); cur.form?.requestSubmit?.(); },
-    play() { hit('#play-pause-button'); }, next() { hit('.next-button'); }, prev() { hit('.previous-button'); }
+    play() { const v = document.querySelector('video'); if (v) { if (v.paused) v.play(); else v.pause(); } else hit('#play-pause-button'); },
+    next() { return vclick('.next-button'); }, prev() { return vclick('.previous-button'); }
   };
 })();`;
 const MUSIC_CMD = { move: 2, show: 0, ok: 0, active: 0, type: 1, enter: 0, play: 0, next: 0, prev: 0 };
@@ -1519,7 +1522,9 @@ ipcMain.handle('musicShow', (e, on) => {
   win.webContents.focus();
 });
 // Atrás como en un navegador (minimiza el reproductor, sale de Google…); false = no hay a dónde volver
-ipcMain.handle('musicBack', () => {
+ipcMain.handle('musicBack', async () => {
+  if (!musicView) return false;
+  if (/PLAYER_PAGE_OPEN|FULLSCREEN/.test(await musicState()) && await musicMinimize()) return true;
   if (!musicView) return false;
   const wc = musicView.webContents, h = wc.navigationHistory;
   if (!(h ? h.canGoBack() : wc.canGoBack())) return false;
@@ -1534,32 +1539,55 @@ ipcMain.handle('musicCmd', async (e, cmd, ...args) => {
   if (r && r.click) { musicClick(r.click); return null; }   // "elegir": clic real en el centro de lo marcado
   return r;
 });
-// Abre el reproductor grande (después de ir atrás queda solo la barra de abajo): clic real en la miniatura de la portada,
-// a la izquierda del título (es el reproductor achicado). Si no se abrió, segundo intento sobre el título.
+// Estado del reproductor de YouTube Music: PLAYER_BAR_ONLY (solo la barra), PLAYER_PAGE_OPEN (abierto) o FULLSCREEN (video a pantalla completa)
+const musicState = () => musicView.webContents.executeJavaScript("document.querySelector('ytmusic-app-layout')?.getAttribute('player-ui-state') || ''", true).catch(() => '');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Abre el reproductor grande (después de ir atrás queda solo la barra de abajo): clic real en el hueco de la barra a la derecha
+// del título. No en la miniatura: si la canción es un video, la miniatura es el video y lo pone a pantalla completa sin controles.
 const MUSIC_BAR = `(() => {
   const b = [...document.querySelectorAll('ytmusic-player-bar')].find(e => { const r = e.getBoundingClientRect(); return r.height > 20 && r.top > innerHeight / 2; });
   if (!b) return null;
   const br = b.getBoundingClientRect(), y = Math.round(br.top + br.height / 2), w = b.querySelector('.content-info-wrapper')?.getBoundingClientRect();
-  const thumb = [...document.querySelectorAll('ytmusic-player yt-img-shadow, ytmusic-player-bar yt-img-shadow, ytmusic-player-bar img')]
-    .map(e => e.getBoundingClientRect()).find(r => r.width > 16 && r.top >= br.top - 4 && r.bottom <= br.bottom + 4);
-  return {
-    open: document.querySelector('ytmusic-app-layout')?.getAttribute('player-ui-state') === 'PLAYER_PAGE_OPEN',
-    thumb: thumb ? { x: Math.round(thumb.left + thumb.width / 2), y: Math.round(thumb.top + thumb.height / 2) } : { x: Math.round(br.left + 40), y },
-    title: w ? { x: Math.round(w.left + Math.min(w.width / 2, 80)), y } : null
-  };
+  if (!w) return { gap: null, title: null };
+  const btn = Math.min(...[...b.querySelectorAll('tp-yt-paper-icon-button, yt-icon-button, #play-pause-button')].map(e => e.getBoundingClientRect()).filter(r => r.width > 8 && r.left > w.right).map(r => r.left), br.right);
+  const gx = Math.round(Math.min(w.right + 12, btn - 8));
+  return { gap: gx > w.right ? { x: gx, y } : null, title: { x: Math.round(w.left + Math.min(w.width / 2, 80)), y } };
 })()`;
-const musicOpenState = () => musicView.webContents.executeJavaScript("document.querySelector('ytmusic-app-layout')?.getAttribute('player-ui-state') === 'PLAYER_PAGE_OPEN'", true).catch(() => false);
 ipcMain.handle('musicExpand', async () => {
   if (!musicView || musicView.webContents.isLoading()) return false;
+  const s = await musicState();
+  if (s === 'PLAYER_PAGE_OPEN') return true;
+  if (s === 'FULLSCREEN') return musicMinimize();           // quedó un video a pantalla completa: se vuelve al reproductor normal
   const p = await musicView.webContents.executeJavaScript(MUSIC_BAR, true).catch(() => null);
   if (!p) return 'none';                                    // no hay nada sonando: no hay barra
-  if (p.open) return true;
-  musicClick(p.thumb);
-  await new Promise(r => setTimeout(r, 900));
-  if (!musicView || await musicOpenState()) return true;
-  if (p.title) { musicClick(p.title); await new Promise(r => setTimeout(r, 900)); }
-  return !!musicView && await musicOpenState();
+  for (const pt of [p.gap, p.title].filter(Boolean)) {
+    musicClick(pt); await sleep(900);
+    if (!musicView) return false;
+    if (await musicState() === 'PLAYER_PAGE_OPEN') return true;
+  }
+  return false;
 });
+// Minimizar el reproductor: botón "Minimizar la página del reproductor" (arriba a la izquierda) con clic real;
+// un video a pantalla completa sale con Escape. Si nada de eso alcanza, false (quien llama prueba con el historial)
+const MUSIC_MIN = `(() => {
+  const ok = e => { const r = e.getBoundingClientRect(); return r.width > 8 && r.height > 8 && r.top < innerHeight / 2; };
+  const l = [...document.querySelectorAll('ytmusic-player-page button, ytmusic-player-page tp-yt-paper-icon-button, ytmusic-player-page yt-icon-button')].filter(ok);
+  const e = l.find(e => /minimi|minimize/i.test(e.getAttribute('aria-label') || '')) || l.sort((a, c) => a.getBoundingClientRect().top - c.getBoundingClientRect().top || a.getBoundingClientRect().left - c.getBoundingClientRect().left)[0];
+  if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+})()`;
+async function musicMinimize() {
+  const wc = musicView.webContents;
+  if (await musicState() === 'FULLSCREEN') {
+    for (const type of ['keyDown', 'keyUp']) wc.sendInputEvent({ type, keyCode: 'Escape' });
+    await sleep(700);
+    if (!musicView) return false;
+    if (await musicState() !== 'FULLSCREEN') return true;
+  }
+  const p = await wc.executeJavaScript(MUSIC_MIN, true).catch(() => null);
+  if (!p) return false;
+  musicClick(p); await sleep(800);
+  return !!musicView && !/PLAYER_PAGE_OPEN|FULLSCREEN/.test(await musicState());
+}
 ipcMain.handle('musicKb', (e, on) => { musicKbOn = !!on && overlayOn; if (musicView) musicView.setBounds(musicBounds()); });
 ipcMain.handle('musicSearch', (e, q) => { if (musicView) musicView.webContents.loadURL(MUSIC_URL + 'search?q=' + encodeURIComponent(String(q).slice(0, 200))); });
 
