@@ -75,8 +75,11 @@ const cfgFile = () => path.join(userDir(), 'config.json');
 const DEFAULTS = { custom: [], apiKey: '', hotkey: 'Control+Alt+P', layout: 'ps4', recent: {}, bg: true, autostart: false, minimized: false, hideTaskbar: true, gpuMode: 'auto', tune: { done: false, tried: {} } };
 
 function loadCfg() {
-  try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; }
-  catch { return { ...DEFAULTS }; }
+  let c;
+  try { c = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; }
+  catch { c = { ...DEFAULTS }; }
+  delete c.play;                                           // 1.29–1.30: tiempo jugado de los logros propios del launcher (quitados)
+  return c;
 }
 function saveCfg() { fs.mkdirSync(userDir(), { recursive: true }); fs.writeFileSync(cfgFile(), JSON.stringify(cfg, null, 2)); }
 
@@ -777,7 +780,6 @@ function dropFront() {
 let hideT = null;
 function showLauncher() {
   if (!win) return;
-  playEnd();
   clearTimeout(hideT); hideT = null;
   if (overlayOn) closeOverlay();
   restoreFull();
@@ -1087,7 +1089,6 @@ function lowPrio(on) {
 function pauseLauncher() {
   if (paused || !win || win.isDestroyed() || !win.isVisible() || hideT) return;
   paused = true;
-  playRun();                                               // el juego pasó al frente: empieza a contar el tiempo
   stopStats();
   clearTimeout(launchT); launchT = null;
   win.webContents.send('pause');
@@ -1096,8 +1097,7 @@ function pauseLauncher() {
 function resumeLauncher(front) {
   if (!paused) return;
   paused = false;
-  playEnd();                                               // el launcher volvió al frente: el juego se cerró
-  steamWatchEnd();
+  steamWatchEnd();                                         // el launcher volvió al frente: el juego se cerró
   clearTimeout(noneT); noneT = null;
   lowPrio(false);
   if (win && !win.isDestroyed()) {
@@ -1195,7 +1195,6 @@ ipcMain.handle('cover', (e, item) => cachedCover(item));
 ipcMain.handle('launch', (e, item) => {
   dropFront();
   cfg.recent[item.id] = Date.now();
-  playLaunch(item);
   steamWatchStart(item);
   saveCfg();
   if (item.type === 'steam') shell.openExternal('steam://rungameid/' + item.appid);
@@ -1204,10 +1203,10 @@ ipcMain.handle('launch', (e, item) => {
   // El launcher sigue visible ("Iniciando…") hasta que otro programa pasa al primer plano: entonces se pausa solo.
   // Si en 2 min no aparece nada, la interfaz vuelve a la normalidad. Sin ayudante (no Windows / PowerShell bloqueado) se oculta como antes.
   clearTimeout(launchT);
-  if (shellProc) launchT = setTimeout(() => { launchT = null; playEnd(); if (win && !win.isDestroyed()) win.webContents.send('launch-end'); }, 120000);
-  else { hideLauncher(); playRun(); }                       // sin ayudante no se sabe cuándo aparece: se cuenta desde ya
+  if (shellProc) launchT = setTimeout(() => { launchT = null; if (win && !win.isDestroyed()) win.webContents.send('launch-end'); }, 120000);
+  else hideLauncher();
 });
-ipcMain.handle('cancelLaunch', () => { clearTimeout(launchT); launchT = null; playEnd(); });
+ipcMain.handle('cancelLaunch', () => { clearTimeout(launchT); launchT = null; });
 
 ipcMain.handle('add', async (e, file) => {
   file = String(file || '');
@@ -1387,72 +1386,8 @@ async function achievements(appid) {
   return val;
 }
 ipcMain.handle('achievements', (e, appid) => achievements(appid));
-// ---------- Logros propios del launcher (juegos que no son de Steam) ----------
-// Esos juegos no tienen dónde guardar logros, así que el launcher cuenta lo suyo: veces abierto, tiempo jugado (desde que el juego
-// pasa al frente hasta que el launcher vuelve), partida más larga, días seguidos, horario. Todo en cfg.play[id]; el tiempo se guarda
-// cada minuto. Cada logro guarda la fecha en que se consiguió (got) y se avisa a la interfaz al desbloquearlo.
-const DAY = 864e5;
-const dayKey = t => { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
-const TROPHIES = [                                         // [id, nivel, nombre, descripción, condición]
-  ['first', 'bronze', 'Primera partida', 'Jugalo por primera vez desde el PS Launcher', s => s.opens >= 1],
-  ['h1', 'bronze', 'Calentando motores', 'Jugá 1 hora en total', s => s.secs >= 3600],
-  ['o10', 'bronze', 'De la casa', 'Abrilo 10 veces', s => s.opens >= 10],
-  ['night', 'bronze', 'Noctámbulo', 'Empezá una partida entre la medianoche y las 5', s => !!s.night],
-  ['streak3', 'silver', 'Tres al hilo', 'Jugá 3 días seguidos', s => (s.streak || 0) >= 3],
-  ['h10', 'silver', 'Fanático', 'Jugá 10 horas en total', s => s.secs >= 36000],
-  ['marathon', 'silver', 'Maratón', 'Jugá 3 horas en una sola partida', s => (s.best || 0) >= 10800],
-  ['back', 'silver', 'El regreso', 'Volvé a jugarlo después de 30 días sin abrirlo', s => !!s.back],
-  ['o50', 'gold', 'Fiel', 'Abrilo 50 veces', s => s.opens >= 50],
-  ['streak7', 'gold', 'Semana completa', 'Jugá 7 días seguidos', s => (s.streak || 0) >= 7],
-  ['h50', 'gold', 'Veterano', 'Jugá 50 horas en total', s => s.secs >= 180000],
-  ['h100', 'gold', 'Leyenda', 'Jugá 100 horas en total', s => s.secs >= 360000],
-];
-TROPHIES.push(['plat', 'platinum', 'Platino', 'Conseguí todos los demás logros de este juego', s => TROPHIES.every(t => t[0] === 'plat' || s.got[t[0]])]);
-const playStats = id => { const p = cfg.play || (cfg.play = {}); return p[id] || (p[id] = { opens: 0, secs: 0, best: 0, got: {} }); };
-function playCheck(id, name) {
-  const s = playStats(id), now = Date.now(), fresh = [];
-  for (const [k, tier, n, , test] of TROPHIES) if (!s.got[k] && test(s)) { s.got[k] = now; fresh.push(n); trophyNotify({ name: n, game: name, icon: trophySvg(tier) }); }
-  if (fresh.length && win && !win.isDestroyed()) win.webContents.send('trophy', { game: name, names: fresh });
-}
-let session = null;                                        // { id, name, t0: inicio del tiempo (null = esperando que aparezca), tk: último guardado }
-function playLaunch(item) {
-  playEnd();
-  if (!item || item.type === 'steam' || !item.id) return;  // los de Steam tienen sus logros reales
-  const s = playStats(item.id), now = Date.now(), today = dayKey(now);
-  if (s.last && now - s.last > 30 * DAY) s.back = true;
-  if (new Date(now).getHours() < 5) s.night = true;
-  if (s.lastDay !== today) { s.cur = s.lastDay === dayKey(now - DAY) ? (s.cur || 0) + 1 : 1; s.lastDay = today; s.streak = Math.max(s.streak || 0, s.cur); }
-  s.opens++; s.first = s.first || now; s.last = now;
-  session = { id: item.id, name: item.name, t0: null, tk: 0, timer: null };
-  playCheck(item.id, item.name);
-}
-function playRun() {
-  if (!session || session.t0) return;
-  session.t0 = session.tk = Date.now();
-  session.timer = setInterval(playTick, 60000);
-}
-function playTick() {
-  if (!session || !session.t0) return;
-  const now = Date.now(), s = playStats(session.id);
-  s.secs += Math.round((now - session.tk) / 1000); session.tk = now;
-  s.best = Math.max(s.best || 0, Math.round((now - session.t0) / 1000));
-  playCheck(session.id, session.name);
-  saveCfg();
-}
-function playEnd() {
-  if (!session) return;
-  if (session.t0) playTick();
-  clearInterval(session.timer); session = null;
-}
-function trophies(id) {
-  const s = (cfg.play || {})[id] || { opens: 0, secs: 0, best: 0, got: {} };
-  const live = session && session.id === id && session.t0 ? Math.round((Date.now() - session.tk) / 1000) : 0;
-  const list = TROPHIES.map(([k, tier, name, desc]) => ({ id: k, tier, name, desc, done: !!s.got[k], time: s.got[k] || 0 }));
-  return { total: list.length, done: list.filter(t => t.done).length, secs: s.secs + live, opens: s.opens, best: s.best || 0,
-    list: list.sort((a, b) => (b.done - a.done) || (b.time - a.time)) };
-}
 // ---------- Aviso de logro: arriba a la derecha, encima de cualquier juego, con sonido ----------
-// Ventana propia, transparente, sin foco y que deja pasar el mouse: entra deslizándose desde el borde derecho, queda unos segundos y sale.
+// Solo para los logros de Steam. Ventana propia, transparente, sin foco y que deja pasar el mouse: entra deslizándose desde el borde derecho, queda unos segundos y sale.
 // El sonido es un timbre sintetizado (dos notas suaves con eco), no un archivo. Con juegos en pantalla completa exclusiva no se ve.
 const TROPHY_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;background:transparent;overflow:hidden;font-family:"Segoe UI",sans-serif;color:#fff;user-select:none}
@@ -1483,8 +1418,6 @@ window.show = (n, g, i) => {
   setTimeout(() => t.classList.remove('in'), 5000);
 };
 </script></body></html>`;
-const TROPHY_COL = { bronze: '#cd7f45', silver: '#c9d1d9', gold: '#f0c03a', platinum: '#a9e1ff' };
-const trophySvg = tier => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72"><rect width="72" height="72" rx="10" fill="#0f2a6e"/><g fill="${TROPHY_COL[tier]}"><path d="M22 14h28v12a14 14 0 0 1-28 0z"/><path d="M22 18h-8a8 8 0 0 0 8 10M50 18h8a8 8 0 0 1-8 10" fill="none" stroke="${TROPHY_COL[tier]}" stroke-width="4"/><rect x="33" y="39" width="6" height="9"/><rect x="25" y="48" width="22" height="6" rx="2"/><rect x="21" y="54" width="30" height="5" rx="2"/></g></svg>`);
 let trophyWin = null, trophyReady = null, trophyBusy = false, trophyHideT = null;
 const trophyList = [];
 function trophyWindow() {
@@ -1534,8 +1467,6 @@ async function steamWatchTick() {
 function steamWatchStop() { if (steamWatch) clearInterval(steamWatch.timer); steamWatch = null; }
 function steamWatchEnd() { if (!steamWatch) return; const w = steamWatch; steamWatchTick().finally(() => { if (steamWatch === w) steamWatchStop(); }); }
 
-ipcMain.handle('trophies', (e, id) => trophies(String(id)));
-ipcMain.handle('trophySummary', (e, id) => { const t = trophies(String(id)); return { done: t.done, total: t.total }; });
 
 ipcMain.handle('achSummary', async (e, appid) => { const a = await achievements(appid); return a ? { done: a.done, total: a.total } : null; });
 

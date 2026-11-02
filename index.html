@@ -1517,29 +1517,20 @@ function achBadge(it) {
     }
   };
   if (SYS[it.type]) { put(null); return; }
-  if (it.type !== 'steam' || !it.appid) { window.api.trophySummary(it.id).then(s => { if (items[sel] === it) put(s); }); return; }   // logros propios del launcher
+  if (it.type !== 'steam' || !it.appid) { put(null); return; }
   if (it.appid in achSum) { put(achSum[it.appid]); return; }
   window.api.achSummary(it.appid).then(s => { achSum[it.appid] = s; if (items[sel] === it) put(s); });
 }
-// Ícono de los logros propios: un trofeo del color de su nivel (gris si falta)
-const TROPHY_COL = { bronze: '#cd7f45', silver: '#c9d1d9', gold: '#f0c03a', platinum: '#a9e1ff' };
-const trophyIcon = (tier, done) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72"><rect width="72" height="72" rx="10" fill="#0f2a6e"/><g fill="${done ? TROPHY_COL[tier] : '#56607a'}"><path d="M22 14h28v12a14 14 0 0 1-28 0z"/><path d="M22 18h-8a8 8 0 0 0 8 10M50 18h8a8 8 0 0 1-8 10" fill="none" stroke="${done ? TROPHY_COL[tier] : '#56607a'}" stroke-width="4"/><rect x="33" y="39" width="6" height="9"/><rect x="25" y="48" width="22" height="6" rx="2"/><rect x="21" y="54" width="30" height="5" rx="2"/></g></svg>`);
-const hrs = s => s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min' : Math.max(0, Math.floor(s / 60)) + ' min';
 async function achShow() {
   const it = items[sel];
   if (ach || !it || SYS[it.type]) return;
-  let a;
-  if (it.type === 'steam' && it.appid) {
-    a = await window.api.achievements(it.appid);
-    if (!a) { toast('Este juego no tiene logros de Steam (o todavía no lo abriste)'); return; }
-    achSum[it.appid] = { done: a.done, total: a.total };
-  } else {                                                   // logros propios del launcher
-    a = await window.api.trophies(it.id);
-    a.list.forEach(x => { x.icon = trophyIcon(x.tier, x.done); });
-  }
+  if (it.type !== 'steam' || !it.appid) { toast('Los logros solo están para los juegos de Steam'); return; }
+  const a = await window.api.achievements(it.appid);
+  if (!a) { toast('Este juego no tiene logros de Steam (o todavía no lo abriste)'); return; }
+  achSum[it.appid] = { done: a.done, total: a.total };
   ach = { it, a, f: 0 };
   $('#ach-title').textContent = it.name;
-  $('#ach-count').textContent = `${a.done} de ${a.total} logros · ${Math.round(a.done * 100 / a.total)} %` + (a.secs != null ? ` · ${hrs(a.secs)} jugadas · abierto ${a.opens} ${a.opens === 1 ? 'vez' : 'veces'}` : '');
+  $('#ach-count').textContent = `${a.done} de ${a.total} logros · ${Math.round(a.done * 100 / a.total)} %`;
   $('#ach-bar i').style.transform = `scaleX(${a.done / a.total})`;
   const fmt = t => new Date(t).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
   const frag = document.createDocumentFragment();
@@ -1562,9 +1553,6 @@ function achHint() {
   const gp = hintGp, k = gp ? kindOf(gp) : 'kb', L = gp ? labelsOf(gp) : { back: 'Esc', scan: 'RePág', layout: 'AvPág' };
   $('#hd-foot2').innerHTML = `<span class="hk">${glyph(L.back, k)}cerrar</span><span class="hk">${glyph(L.scan, k)}${glyph(L.layout, k)}de a 6</span><span class="hk">flechas: recorrer</span>`;
 }
-// El aviso lo muestra main.js (ventana arriba a la derecha, encima de todo); acá solo se actualiza el progreso junto al nombre
-function trophyFlush() { const it = items[sel]; if (it) achBadge(it); }
-window.api.onTrophy(trophyFlush);
 achEl.addEventListener('click', e => { if (e.target === achEl) achClose(); });
 achEl.addEventListener('contextmenu', e => { e.preventDefault(); achClose(); });
 // ---------- Portada en HD (tecla P / gatillo izquierdo) ----------
@@ -2363,7 +2351,7 @@ window.api.onResume(() => {
   else if (!document.body.classList.contains('hasart')) armArt();
   prev = {};                                     // el mando no arrastra pulsaciones antiguas
   startPoll(); startClock(); syncWave();
-  setTimeout(trophyFlush, 600);                  // logros conseguidos mientras se jugaba
+  for (const k in achSum) delete achSum[k];      // los logros de Steam pudieron cambiar mientras se jugaba
   const cur = items[sel]; if (cur) achBadge(cur);
   if (fpsOn) { frames = 0; t0 = performance.now(); requestAnimationFrame(fpsLoop); }
 });
